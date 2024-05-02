@@ -68,7 +68,7 @@ function DragTraining()
 		%=============================
 		%=============================
 		%setup some other parameters
-		nTrials = 5;
+		nTrials = 20;
 		moveWallAfterNCorrectTrials = 3;
 		nCorrect = 0;
 		RestrictKeysForKbCheck(KbName('ESCAPE'));
@@ -204,6 +204,11 @@ function DragTraining()
 				results.anidata(j).ke = [results.anidata(j).ke, anmtr.kineticEnergy];
 				results.anidata(j).pe = [results.anidata(j).pe, anmtr.potentialEnergy];
 			end
+	
+					% Code to display experiment summary
+					disp('Experiment Summary:');
+					disp(['Total Trials: ' num2str(length(results.N))]);
+					disp(['Correct Trials: ' num2str(sum(results.correct))]);
 	
 			if KbCheck; break; end
 	
