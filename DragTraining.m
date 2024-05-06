@@ -33,6 +33,8 @@ function DragTraining()
         pumpArduino = arduinoManager('port','/dev/ttyACM0');    % Arduino for pump
         pumpArduino.silentMode = false;
         pumpArduino.open;
+        % Modify the time field of the reward struct
+        pumpArduino.reward.time = 500;
         %==============================================Audio Manager
         if ~exist('aM','var') || isempty(aM) || ~isa(aM,'audioManager')
             aM=audioManager;
