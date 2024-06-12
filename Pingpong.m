@@ -1,9 +1,10 @@
-s=screenManager;
+s = screenManager;
 s.backgroundColour = [ 0 0.3 0.2];
 s.screen = 1;
 
 %==============================================Arduino initialization
-a_front = arduinoManager('port','/dev/ttyACM0','shield','new'); a_front.open;
+a_front = arduinoManager('port','/dev/ttyACM0','shield','new'); 
+a_front.open;
 
 %==============================================Audio Manager
 if ~exist('aM','var') || isempty(aM) || ~isa(aM,'audioManager')
@@ -23,8 +24,7 @@ radius = stim.size/2;
 ox = stim.xPosition;
 oy = stim.yPosition;
 
-t = touchManager('isDummy',false);
-t.verbose=true;
+t = touchManager('isDummy',true,'verbose',true);
 
 RestrictKeysForKbCheck(KbName('ESCAPE'));
 
@@ -45,7 +45,7 @@ try
 	t.createQueue;
 	t.start;
 
-	for j = 1:20
+	for j = 1:3
 
 		fprintf('trial: %d\n', j);
 		s.flip;
