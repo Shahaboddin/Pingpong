@@ -1,30 +1,21 @@
 function runPingPong(in)
 %==============================================Screen
-
+verbose = true;
 ballSize = in.ballSize;
 startX1 = in.startA;
 startX2 = in.startB;
 airResistanceCoeff = in.airR;
 elasticityCoeff = in.elasticity;
-leftWall = in.leftW;
-rightWall = in.rightW;
-correctWall = rightWall;
-
-
 
 %===============================================
 % this modifies the touch movement > velocity
 % higher values means bigger impact
 touchSensitivity = in.sensitivity;
-% set up the walls
-floorThickness = in.floor;
-wallThickness = in.wallT;
 
 try 
 	s = screenManager;
 	s.backgroundColour = [0 0 0];
-	s.windowed = [];
-	s.specialFlags = 0;
+	if max(Screen('Screens')) == 0; s.windowed = [0 0 1100 800]; s.specialFlags = 0; end
 	sv = open(s);
 	
 	%==============================================Arduino initialization
@@ -46,28 +37,19 @@ try
 	if ~aM.isSetup;	aM.setup; end
 	
 	%==============================================STIMULUS
-	ball = imageStimulus;
+	ball = imageStimulus('name','ball');
 	ball.filePath = in.image;
 	ball.xPosition = startX1;
-	ball.yPosition = sv.bottomInDegrees-ballSize-0.5;
+	ball.yPosition = sv.bottomInDegrees - in.floor - ballSize - 0.2;
 	ball.angle = 0;
-	ball.speed = 1;
+	ball.speed = 0;
 	ball.size = ballSize;
 	radius = ball.size/2;
 	startx = ball.xPosition;
 	starty = ball.yPosition;
-	
-	%===============================================ANIMMANAGER
-	anmtr = animationManager;
-	anmtr.rigidparams.radius = radius;
-	anmtr.rigidparams.mass = 5;
-	anmtr.rigidparams.airResistanceCoeff = airResistanceCoeff;
-	anmtr.rigidparams.elasticityCoeff = elasticityCoeff;
-	anmtr.timeDelta = sv.ifi;
-	
+
 	%===============================================TOUCH
-	tM = touchManager('isDummy',in.dummy);
-	tM.verbose = true;
+	tM = touchManager('isDummy',in.dummy,'verbose',verbose);
 	tM.window.radius = radius;
 	tM.window.X = startx;
 	tM.window.Y = starty;
@@ -81,24 +63,38 @@ try
 	dateStamp = initialiseSaveFile(s);
 	fileName = [s.paths.savedData filesep 'DragTraining-' dateStamp '-.mat'];
 
-	% left,top,right,bottom
-	floorrect = [sv.leftInDegrees sv.bottomInDegrees-floorThickness sv.rightInDegrees sv.bottomInDegrees];
-	wall1 = [leftWall sv.topInDegrees leftWall+wallThickness sv.bottomInDegrees];
-	wall2 = [rightWall sv.topInDegrees rightWall+wallThickness sv.bottomInDegrees];
+	%==============================================WALLS
+	floor = barStimulus('name','floor','colour',[0.8 0.4 0.4 0.2],'barWidth',sv.widthInDegrees,...
+	'barHeight',0.2,'yPosition',sv.bottomInDegrees-in.floor);
+	ceiling = floor.clone;
+	ceiling.name = 'ceiling';
+	ceiling.yPosition = sv.topInDegrees;
+	
+	wall1 = barStimulus('name','wall1','colour',[0.4 0.8 0.4 0.2],'barWidth',0.1,'barHeight',...
+		sv.heightInDegrees,'xPosition',in.leftW);
+	wall2 = clone(wall1);
+	wall2.name = 'wall2';
+	wall2.xPosition = in.rightW;
 
-	% assign wall positions to anim-manager
-	anmtr.rigidparams.leftwall = wall1(3);
-	anmtr.rigidparams.rightwall = wall2(1);
-	anmtr.rigidparams.floor = sv.bottomInDegrees-floorThickness;
-	anmtr.rigidparams.ceiling = sv.topInDegrees;
+	walls = metaStimulus('stimuli',{floor, ceiling, wall1, wall2});
+
+	%===============================================ANIMMANAGER
+	anmtr = animationManager('timeDelta', sv.ifi, 'verbose', verbose);
+	anmtr.rigidParams.linearDamping = airResistanceCoeff;
+	anmtr.addBody(floor,'Rectangle','infinite');
+	anmtr.addBody(ceiling,'Rectangle','infinite');
+	anmtr.addBody(wall1,'Rectangle','infinite');
+	anmtr.addBody(wall2,'Rectangle','infinite');
+	anmtr.addBody(ball,'Circle','normal',10, 0.8, 0.8, ball.speed/2);
 
 	% bump our priority
 	Priority(1);
 
 	% setup the objects
 	setup(ball, s);
+	setup(walls, s);
 	setup(tM, s);
-	setup(anmtr, ball);
+	setup(anmtr, s);
 	createQueue(tM);
 	start(tM);
 
@@ -108,30 +104,36 @@ try
 	results = struct('N',[],'correct',[],'wallPos',[],...
 		'RT',[],'date',dateStamp,'name',fileName,...
 		'anidata',anidata);
+
+	[ballb, ballidx] = anmtr.getBody('ball');
+	[incorrectWall, ~, iIDX] = anmtr.getBody('wall1');
+	[correctWall, ~, cIDX] = anmtr.getBody('wall2');
 	
 	for j = 1:nTrials
 
 		results.anidata(j).N = j;
-		fprintf('--->>> Trial: %i - Wall: %.1f\n', j,correctWall);
+		fprintf('--->>> Trial: %i - Wall: %.1f\n', j,1);
 		ball.xPositionOut = startx;
 		ball.yPositionOut = starty;
 		ball.update;
+		ballb.setGravityScale(1);
+		tM.window.X = ball.xFinalD;
+		tM.window.Y = ball.yFinalD;
 		
 		% the animator needs to be reset to the ball on each trial
-		anmtr.rigidparams.rightwall = wall2(1);
-		anmtr.rigidparams.airResistanceCoeff = 0.5;
-		reset(anmtr);
-		setup(anmtr, ball);
+		update(anmtr);
 		
-		xy = []; tx = []; ty = []; iv = round(sv.fps/10);
+		xy = []; tx = []; ty = []; iv = round(sv.fps/5);
 		correct = false;
-		countDown = 10;
+		countDown = 30;
+		correctCollide = false;
+		incorrectCollide = false;
 		inTouch = false;
-		drawBackground(s, s.backgroundColour)
+		drawBackground(s, s.backgroundColour);
 		flush(tM);
 		vbl = flip(s); tStart = vbl;
 
-		while ~correct && vbl < tStart + 5
+		while ~correct && vbl < tStart + 15
 			if KbCheck; break; end
 			if tM.eventAvail % check we have touch event[s]
 				tM.window.X = ball.xFinalD;
@@ -144,8 +146,8 @@ try
 					xy = []; tx = []; ty = []; inTouch = false;
 				end
 				if inTouch && ~isempty(e) && e.Type > 1 && e.Type < 4
-					if tM.y+radius > (floorrect(2)) % make sure we don't move below the floor
-						ball.updateXY(e.MappedX, toPixels(s,floorrect(2)-radius,'y'), false);
+					if tM.y+radius > (floor.yPosition) % make sure we don't move below the floor
+						ball.updateXY(e.MappedX, toPixels(s,floor.yPosition-radius,'y'), false);
 					else
 						ball.updateXY(e.MappedX, e.MappedY, false);
 					end
@@ -155,49 +157,49 @@ try
 						xy = [tx(end-(iv-1):end)' ty(end-(iv-1):end)'];
 						vx = mean(diff(xy(:,1))) * iv * touchSensitivity;
 						vy = mean(diff(xy(:,2))) * iv * touchSensitivity;
-						x = mean([anmtr.x xy(end,1)]);
-						y = mean([anmtr.y xy(end,2)]);
-						%fprintf('UPDATE X: s%.1f e%.1f a%.1f n%.1f v%.1f Y: s%.1f e%.1f a%.1f n%.1f v%.1f\n', ...
-						%       i.xFinal,e.MappedX,a.x,x,vx,i.yFinal,e.MappedY,a.y,y,vy);
-						anmtr.editBody(x,y,vx,vy);
+						av = vx / 2;
+						x = xy(end,1);
+						y = xy(end,2);
+						fprintf('UPDATE X: stim%.1f evt%.1f anim%.1f n%.1f v%.1f Y: stim%.1f evt%.1f anim%.1f n%.1f v%.1f A: %.1f\n', ...
+								ball.xFinal,e.MappedX,anmtr.x,x,vx,ball.yFinal,e.MappedY,anmtr.y,y,vy,av);
+						anmtr.editBody(ballb,x,y,vx,vy,av);
 					else
-						anmtr.editBody(tM.x,tM.y);
+						anmtr.editBody(ballb,tM.x,tM.y);
 					end
 				else
-					animate(anmtr);
+					step(anmtr);
 					ball.updateXY(anmtr.x, anmtr.y, true);
-					ball.angleOut = -rad2deg(anmtr.angle);
+					a = anmtr.angularVelocity(ballidx);
+					ball.angleOut = ball.angleOut + (rad2deg(a) * anmtr.timeDelta);
 				end
+				fprintf('\n');
 			else
-				animate(anmtr);
+				step(anmtr);
 				ball.updateXY(anmtr.x, anmtr.y, true);
-				ball.angleOut = -rad2deg(anmtr.angle);
+				a = anmtr.angularVelocity(ballidx);
+				ball.angleOut = ball.angleOut + (rad2deg(a) * anmtr.timeDelta);
 			end
-			if anmtr.hitLeftWall
-				anmtr.rigidparams.airResistanceCoeff = 5;
-				countDown = countDown - 1;
-				if countDown == 0
-					break;
-				end
-			elseif anmtr.hitRightWall
-				anmtr.rigidparams.airResistanceCoeff = 5;
+			[coll, otherBody] = isCollision(anmtr, ballb);
+			if coll && otherBody.hashCode == anmtr.bodies(cIDX).hash
+				correctCollide = true;
+			elseif coll && otherBody.hashCode == anmtr.bodies(iIDX).hash
+				incorrectCollide = true;
+			end
+			if correctCollide
+				ballb.setGravityScale(0.1);
 				countDown = countDown - 1;
 				if countDown == 0
 					correct = true;
 				end
+			elseif incorrectCollide
+				ballb.setGravityScale(0.1);
+				countDown = countDown - 1;
+				if countDown == 0
+					break;
+				end
 			end
 			draw(ball);
-			if anmtr.hitLeftWall
-				drawRect(s,wall1,[0.6 0.3 0.3]);
-			else
-				drawRect(s,wall1,[0.3 0.3 0.3]);
-			end
-			if anmtr.hitRightWall
-				drawRect(s,wall2,[0.3 0.6 0.3]);
-			else
-				drawRect(s,wall2,[0.3 0.3 0.3]);
-			end
-			drawRect(s,floorrect,[0.3 0.3 0.3]);
+			draw(walls);
 			vbl = flip(s, vbl + sv.halfifi);
 			% save all animation data for each trial, we can use this to "play
 			% back" the action performed by the monkey
@@ -214,7 +216,7 @@ try
 
 		results.N = [results.N j];
 		results.correct = [results.correct correct];
-		results.wallPos = [results.wallPos correctWall];
+		results.wallPos = [results.wallPos 1];
 		results.RT = [results.RT (tStart - GetSecs)];
 
 		if correct
@@ -224,21 +226,16 @@ try
 			giveReward(rwd_front);
 			beep(aM, 3000,0.1,0.1);
 			disp('--->>> CORRECT');
-			WaitSecs(2);
+			WaitSecs('Yieldsecs',2);
 			if nCorrect >= moveWallAfterNCorrectTrials
 				nCorrect = 0;
-				if correctWall < sv.rightInDegrees - 1
-					disp('Wall moved...');
-					correctWall = correctWall + 1;
-				end
-				wall2 = [correctWall sv.topInDegrees correctWall+wallThickness sv.bottomInDegrees];
 			end
 		else
 			disp('--->>> FAIL');
 			beep(aM, 300,0.5,0.5);
 			drawBackground(s, [0.6 0.3 0.3]);
 			flip(s);
-			WaitSecs(3);
+			WaitSecs('Yieldsecs',3);
 		end
 
 		plot(in.axis1, results.anidata(end).x,results.anidata(end).y,'-');
@@ -257,6 +254,7 @@ try
 	save(fileName,"results");
 	tM.close;
 	ball.reset;
+	walls.reset;
 	s.close;
 
 	plot(in.axis1, results.anidata(end).x,results.anidata(end).y,'-');
