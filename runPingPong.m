@@ -19,15 +19,15 @@ try
 	sv = open(s);
 	
 	%==============================================Arduino initialization
-	if ~exist('rM','var') || isempty(rM)
-		rM = arduinoManager();
-	end
-	rM.reward.pin = 2;
-	rM.reward.time = 300;
-
 	rwd_front = arduinoManager('port',in.arduinoa,'shield','new');
+	if ~isempty(in.arduinoa)
+	
 	rwd_front.silentMode = true;
 	rwd_front.open;
+
+	rwd_back = arduinoManager('port',in.arduinob,'shield','new');
+	rwd_back.silentMode = true;
+	rwd_back.open;
 	
 	%==============================================Audio Manager
 	if ~exist('aM','var') || isempty(aM) || ~isa(aM,'audioManager')
@@ -47,50 +47,38 @@ try
 	radius = ball.size/2;
 	startx = ball.xPosition;
 	starty = ball.yPosition;
-
+	
+	%===============================================ANIMATION MANAGER
+	anim = animationManager;
+	anim.timeDelta = sv.ifi;
+	anim.rigidParams.linearDamping = in.linearD;
+	anim.addScreenBoundaries(sv,[in.leftW in.ceiling in.rightW in.floor]);
+	[lwb, [], [], lws] = anim.getBody('leftwall');
+	[clb, [], [], cls] = anim.getBody('ceiling');
+	[rwb, [], [], rws] = anim.getBody('rightwall');
+	[flb, [], [], fls] = anim.getBody('floor');
+	walls = metaStimulus('stimuli',{lws, cls, rws, fls});
+	anim.addBody(ball,'Circle','normal');
+	
 	%===============================================TOUCH
 	tM = touchManager('isDummy',in.dummy,'verbose',verbose);
 	tM.window.radius = radius;
 	tM.window.X = startx;
 	tM.window.Y = starty;
 	
-	%setup some other parameters
+	%===============================================setup some other parameters
 	nTrials = 500;
 	moveWallAfterNCorrectTrials = 3;
 	nCorrect = 0;
 	RestrictKeysForKbCheck(KbName('ESCAPE'));
 
-	dateStamp = initialiseSaveFile(s);
-	fileName = [s.paths.savedData filesep 'DragTraining-' dateStamp '-.mat'];
+	[pth, sID, dID] = getALF(s, [in.subjecta '-' in.subjectb],'pp','cogp',true);
+	fileName = [pth 'PingPong-' dID '-.mat'];
 
-	%==============================================WALLS
-	floor = barStimulus('name','floor','colour',[0.8 0.4 0.4 0.2],'barWidth',sv.widthInDegrees,...
-	'barHeight',0.2,'yPosition',sv.bottomInDegrees-in.floor);
-	ceiling = floor.clone;
-	ceiling.name = 'ceiling';
-	ceiling.yPosition = sv.topInDegrees;
-	
-	wall1 = barStimulus('name','wall1','colour',[0.4 0.8 0.4 0.2],'barWidth',0.1,'barHeight',...
-		sv.heightInDegrees,'xPosition',in.leftW);
-	wall2 = clone(wall1);
-	wall2.name = 'wall2';
-	wall2.xPosition = in.rightW;
-
-	walls = metaStimulus('stimuli',{floor, ceiling, wall1, wall2});
-
-	%===============================================ANIMMANAGER
-	anmtr = animationManager('timeDelta', sv.ifi, 'verbose', verbose);
-	anmtr.rigidParams.linearDamping = airResistanceCoeff;
-	anmtr.addBody(floor,'Rectangle','infinite');
-	anmtr.addBody(ceiling,'Rectangle','infinite');
-	anmtr.addBody(wall1,'Rectangle','infinite');
-	anmtr.addBody(wall2,'Rectangle','infinite');
-	anmtr.addBody(ball,'Circle','normal',10, 0.8, 0.8, ball.speed/2);
-
-	% bump our priority
+	%===============================================bump our priority
 	Priority(1);
 
-	% setup the objects
+	%===============================================setup the objects
 	setup(ball, s);
 	setup(walls, s);
 	setup(tM, s);
@@ -98,7 +86,7 @@ try
 	createQueue(tM);
 	start(tM);
 
-	% our results structure
+	%===============================================our results structure
 	anidata = struct('N',NaN,'t',[],'x',[],'y',[],'dx',[],'dy',[],...
 		'ke',[],'pe',[]);
 	results = struct('N',[],'correct',[],'wallPos',[],...
@@ -109,7 +97,10 @@ try
 	[incorrectWall, ~, iIDX] = anmtr.getBody('wall1');
 	[correctWall, ~, cIDX] = anmtr.getBody('wall2');
 	
-	for j = 1:nTrials
+	%===============================================
+	%===============================================
+	%===============================================
+	for jj = 1:nTrials
 
 		results.anidata(j).N = j;
 		fprintf('--->>> Trial: %i - Wall: %.1f\n', j,1);
@@ -203,18 +194,18 @@ try
 			vbl = flip(s, vbl + sv.halfifi);
 			% save all animation data for each trial, we can use this to "play
 			% back" the action performed by the monkey
-			results.anidata(j).t =  [results.anidata(j).t, anmtr.timeStep];
-			results.anidata(j).x =  [results.anidata(j).x, anmtr.x];
-			results.anidata(j).y =  [results.anidata(j).y, anmtr.y];
-			results.anidata(j).dx = [results.anidata(j).dx, anmtr.dX];
-			results.anidata(j).dy = [results.anidata(j).dy, anmtr.dY];
-			results.anidata(j).ke = [results.anidata(j).ke, anmtr.kineticEnergy];
-			results.anidata(j).pe = [results.anidata(j).pe, anmtr.potentialEnergy];
+			results.anidata(jj).t =  [results.anidata(jj).t, anim.timeStep];
+			results.anidata(jj).x =  [results.anidata(jj).x, anim.x];
+			results.anidata(jj).y =  [results.anidata(jj).y, anim.y];
+			results.anidata(jj).dx = [results.anidata(jj).dx, anim.dX];
+			results.anidata(jj).dy = [results.anidata(jj).dy, anim.dY];
+			results.anidata(jj).ke = [results.anidata(jj).ke, anim.kineticEnergy];
+			results.anidata(jj).pe = [results.anidata(jj).pe, anim.potentialEnergy];
 		end
 
 		if KbCheck; break; end
 
-		results.N = [results.N j];
+		results.N = [results.N jj];
 		results.correct = [results.correct correct];
 		results.wallPos = [results.wallPos 1];
 		results.RT = [results.RT (tStart - GetSecs)];
@@ -294,6 +285,7 @@ catch ERR
 	getReport(ERR);
 	Priority(0);
 	RestrictKeysForKbCheck([]);
+	try anim.reset; end
 	try tM.close; end
 	try ball.reset; end
 	try s.close; end
