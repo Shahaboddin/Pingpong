@@ -1,5 +1,7 @@
 function runPingPong(in)
 
+if ~exist('in','var'); error('Need to run this from the GUI!'); end
+
 try 
 	s = screenManager;
 	s.backgroundColour = [0 0 0];
@@ -8,11 +10,11 @@ try
 	
 	%==============================================Arduino initialization
 	rwd_front = arduinoManager('port',in.arduinoa,'shield','new');
-	if in.dummy; rwd_front.silentMode = true; end
+	if isempty(in.arduinoa); rwd_front.silentMode = true; end
 	rwd_front.open;
 
 	rwd_back = arduinoManager('port',in.arduinob,'shield','new');
-	if in.dummy; rwd_back.silentMode = true; end
+	if isempty(in.arduinob); rwd_back.silentMode = true; end
 	rwd_back.open;
 	
 	%==============================================Audio Manager
@@ -22,11 +24,24 @@ try
 	aM.silentMode = false;
 	if ~aM.isSetup;	aM.setup; end
 	
-	%==============================================STIMULUS
+	%==============================================BALL and PEDESTALS
+	ped1 = barStimulus('name','ped1');
+	ped1.colour = in.wallColour;
+	ped1.alpha = 0.8;
+	ped1.type = 'solid';
+	ped1.scaleTexture = 5;
+	ped1.barWidth = 4;
+	ped1.barHeight = 3;
+	ped1.xPosition = in.startA;
+	ped1.yPosition = sv.bottomInDegrees - in.floor;
+	ped2 = clone(ped1);
+	ped2.name = 'ped2';
+	ped2.xPosition = in.startB;
+
 	ball = imageStimulus('name','ball');
 	ball.filePath = in.image;
 	ball.xPosition = in.startA;
-	ball.yPosition = sv.bottomInDegrees - in.floor - in.ballSize - 0.2;
+	ball.yPosition = ped1.yPosition - in.ballSize;
 	ball.angle = 0;
 	ball.speed = 0;
 	ball.size = in.ballSize;
@@ -34,47 +49,50 @@ try
 	startx = ball.xPosition;
 	starty = ball.yPosition;
 	setup(ball, s); show(ball);
-
-	ped1 = imageStimulus('name','ped1');
-	ped1.filePath = 'pedestal.png';
-	ped1.size = 4;
-	ped1.xPosition = in.startA;
-	ped1.yPosition = ball.yPosition+2;
-	ped2 = clone(ped1);
-	ped2.name = 'ped2';
-	ped2.xPosition = in.startB;
-	peds = metaStimulus('stimuli',{ped1,ped2});
-	setup(peds, s); show(peds);
-
+	
 	%===============================================ANIMATION MANAGER
 	anim = animationManager('verbose', in.verbose);
-	anim.timeDelta = sv.ifi;
+	anim.timeDelta = sv.ifi/2;
 	anim.rigidParams.linearDamping = in.linearD;
+	% this creates 4 walls, returns a metaStimulus we can use to draw the walls
+	% visually
 	walls = anim.addScreenBoundaries(sv,[in.leftW in.ceiling in.rightW in.floor]);
-	edit(walls,1:4,'colour',[0.25 1 1 1]);
+	% include our pedestals into this metaStimulus
+	walls{walls.n+1} = ped1;
+	walls{walls.n+1} = ped2;
+	% setup metaStimulus
 	setup(walls, s); show(walls);
+	% get our wall bodies we can use for collision analysis
 	[lwb, ~, lwbidx] = anim.getBody('leftwall');
 	[clb, ~, clbidx] = anim.getBody('ceiling');
 	[rwb, ~, rwbidx] = anim.getBody('rightwall');
 	[flb, ~, flbidx] = anim.getBody('floor');
+	% add pedestals and ball to physics simulation
 	anim.addBody(ped1,'Rectangle','infinite');
 	anim.addBody(ped2,'Rectangle','infinite');
 	anim.addBody(ball,'Circle','normal');
+	% get ball body
 	[ballb, ballidx] = anim.getBody('ball');
+	% setup our physics world
 	setup(anim, s);
+
+	%===============================================DEFINE TOUCH LIMITS
+	fLimit = walls{4}.yPosition - (walls{4}.barHeight/2) - radius;
+	cLimit = walls{2}.yPosition + (walls{2}.barHeight/2) + radius;
+	lLimit = walls{1}.xPosition + (walls{1}.barWidth/2) + radius;
+	rLimit = walls{3}.xPosition - (walls{3}.barWidth/2) - radius;
 	
-	%===============================================TOUCH
+	%===============================================TOUCH MANAGER
 	tM = touchManager('isDummy',in.dummy,'verbose',in.verbose);
-	tM.window.radius = radius;
-	tM.window.X = startx;
-	tM.window.Y = starty;
+	tM.window.radius = radius; % taken from the ball
+	tM.window.X = startx; % lock to the ball position
+	tM.window.Y = starty; % lock to the ball position
 	setup(tM, s);
 	createQueue(tM);
 	start(tM);
 	
 	%===============================================setup some other parameters
 	nTrials = 500;
-	moveWallAfterNCorrectTrials = 3;
 	nCorrect = 0;
 	RestrictKeysForKbCheck(KbName('ESCAPE'));
 	[pth, sID, dID] = getALF(s, [in.subjecta '-' in.subjectb],'pp','cogp',true);
@@ -125,31 +143,45 @@ try
 				tch = checkTouchWindows(tM); % check we are in touch window
 				if tch; inTouch = true; end
 				e = tM.event;
+				nowX = tM.x; nowY = tM.y;
 				if e.Type == 4 % this is a RELEASE event
-					if tM.verbose; fprintf('RELEASE X: %.1f Y: %.1f \n',e.X,e.Y); end
-					xy = []; tx = []; ty = []; inTouch = false;
-				end
-				if inTouch && ~isempty(e) && e.Type > 1 && e.Type < 4
-					if tM.y+radius > (walls{1}.yPosition) % make sure we don't move below the floor
-						ball.updateXY(e.MappedX, toPixels(s,walls{1}.yPosition-radius,'y'), false);
-					else
-						ball.updateXY(e.MappedX, e.MappedY, false);
-					end
-					tx = [tx tM.x];
-					ty = [ty tM.y];
-					if length(tx) >= iv %collect enough samples
-						xy = [tx(end-(iv-1):end)' ty(end-(iv-1):end)'];
-						vx = mean(diff(xy(:,1))) * iv * in.sensitivity;
-						vy = mean(diff(xy(:,2))) * iv * in.sensitivity;
+					if in.verbose; fprintf('>>>RELEASE X: %.1f Y: %.1f \n',nowX,nowY); end
+					if length(tx) >= 3 %collect enough samples
+						ln = length(tx); if ln > iv; ln = iv; end
+						xy = [tx(end-(ln-1):end)' ty(end-(ln-1):end)'];
+						vx = mean(diff(xy(:,1))) * ln * in.sensitivity;
+						vy = mean(diff(xy(:,2))) * ln * in.sensitivity;
 						av = vx / 2;
 						x = xy(end,1);
 						y = xy(end,2);
-						if tM.verbose; fprintf('UPDATE X: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f Y: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f A: %.1f\n', ...
-							ball.xFinal, e.MappedX, anim.x, x, vx, ball.yFinal, e.MappedY, anim.y, y, vy, av); end
+						if in.verbose; fprintf('>>>UPDATE X%i: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f Y: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f A: %.1f\n', ...
+							ln, ball.xFinal, e.MappedX, anim.x, x, vx, ball.yFinal, e.MappedY, anim.y, y, vy, av); end
 						anim.editBody(ballb,x,y,vx,vy,av);
-					else
-						anim.editBody(ballb,tM.x,tM.y);
 					end
+					step(anim);
+					ball.updateXY(anim.x, anim.y, true);
+					a = anim.angularVelocity(ballidx);
+					ball.angleOut = ball.angleOut + (rad2deg(a) * anim.timeDelta);
+					xy = []; tx = []; ty = []; inTouch = false;
+				elseif inTouch && ~isempty(e) && e.Type > 1 && e.Type < 4
+					if nowY > fLimit % make sure we don't move below the floor
+						nowY = fLimit;
+						ball.updateXY(e.MappedX, toPixels(s,fLimit,'y'), false);
+					elseif nowY < cLimit
+						nowY = cLimit;
+						ball.updateXY(e.MappedX, toPixels(s,cLimit,'y'), false);
+					elseif nowX < lLimit
+						nowX = lLimit;
+						ball.updateXY(toPixels(s,lLimit,'x'), e.MappedY, false);
+					elseif nowX > rLimit
+						nowX = rLimit;
+						ball.updateXY(toPixels(s,rLimit,'x'), e.MappedY, false);
+					else
+						ball.updateXY(e.MappedX, e.MappedY, false);
+					end
+					tx = [tx nowX];
+					ty = [ty nowY];
+					anim.editBody(ballb,nowX,nowY);
 				else
 					step(anim);
 					ball.updateXY(anim.x, anim.y, true);
@@ -169,22 +201,22 @@ try
 				incorrectCollide = true;
 			end
 			if correctCollide
-				%ballb.setGravityScale(0.1);
+				%ballb.setGravityScale(100);
 				countDown = countDown - 1;
 				if countDown == 0
 					correct = true;
 				end
 			elseif incorrectCollide
-				%ballb.setGravityScale(0.1);
+				%ballb.setGravityScale(100);
 				countDown = countDown - 1;
 				if countDown == 0
 					break;
 				end
 			end
-			draw(peds);
 			draw(ball);
 			draw(walls);
 			drawGrid(s);
+			drawScreenCenter(s);
 			vbl = flip(s, vbl + sv.halfifi);
 			% save all animation data for each trial, we can use this to "play
 			% back" the action performed by the monkey
