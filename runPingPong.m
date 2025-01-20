@@ -3,7 +3,7 @@ function runPingPong(in)
 if ~exist('in','var'); error('Need to run this from the GUI!'); end
 
 try 
-	s = screenManager;
+	s = screenManager('distance',in.distance,'pixelsPerCm',in.ppc);
 	s.backgroundColour = [0 0 0];
 	if max(Screen('Screens')) == 0; s.windowed = [0 0 1000 800]; s.specialFlags = 0; end
 	sv = open(s);
@@ -83,11 +83,14 @@ try
 	% add pedestals and ball to physics simulation
 	anim.addBody(ped1,'Rectangle','infinite');
 	anim.addBody(ped2,'Rectangle','infinite');
+	if matches(in.task, ["control", "cooperationtime"])
+		anim.addBody(dwall,'Rectangle','infinite');
+	end
 
 	anim.addBody(ball,'Circle','normal');
 	[ballb, ballidx] = anim.getBody('ball');
 
-	if strcmpi(in.task,'control')
+	if matches(in.task, ["control", "cooperationtime"])
 		anim.addBody(ball2,'Circle','normal'); 
 		[ball2b, ball2idx] = anim.getBody('ball2');
 	end
@@ -102,7 +105,8 @@ try
 	rLimit = walls{3}.xPosition - (walls{3}.barWidth/2) - radius;
 	
 	%===============================================TOUCH MANAGER
-	tMF = touchManager('isDummy',in.dummy,'verbose',in.verbose);
+	tMF = touchManager('isDummy',in.dummy,'verbose',in.verbose,...
+		'panelType',1);
 	tMF.window.radius = radius; % taken from the ball
 	tMF.window.X = startx; % lock to the ball position
 	tMF.window.Y = starty; % lock to the ball position
@@ -110,16 +114,17 @@ try
 	createQueue(tMF);
 	start(tMF);
 	
-	tMB = touchManager('isDummy',in.dummy,'verbose',in.verbose,'panelType',2);
+	tMB = touchManager('isDummy',in.dummy,'verbose',in.verbose,...
+		'panelType',2);
 	tMB.window.radius = radius; % taken from the ball
 	if strcmpi(in.task,'cooperationtime')
-		tMF.window.X = startx2; % lock to the ball position
-		tMF.window.Y = starty2; % lock to the ball position
+		tMB.window.X = startx2; % lock to the ball position
+		tMB.window.Y = starty2; % lock to the ball position
 	else
-		tMF.window.X = startx2; % lock to the ball position
-		tMF.window.Y = starty2; % lock to the ball position
+		tMB.window.X = startx2; % lock to the ball position
+		tMB.window.Y = starty2; % lock to the ball position
 	end
-	if isscalar(tMF.names)
+	if isscalar(tMB.names)
 		me.isDummy = true;
 	end
 	setup(tMB, s);
@@ -150,7 +155,7 @@ try
 	for jj = 1:nTrials
 
 		results.anidata(jj).N = jj;
-		fprintf('--->>> Trial: %i\n', jj);
+		fprintf('≣≣≣≣⊱ Trial: %i\n', jj);
 		ball.xPositionOut = startx;
 		ball.yPositionOut = starty;
 		ball.update;
@@ -202,7 +207,7 @@ try
 
 	Priority(0);
 	RestrictKeysForKbCheck([]);
-	disp(['--->>> DATA saving to ' fileName]);
+	disp(['≣≣≣≣⊱ DATA saving to ' fileName]);
 	save(fileName,'results','in');
 	try close(tMF); end %#ok<*TRYNC>
 	try close(tMB); end %#ok<*TRYNC>
@@ -235,63 +240,17 @@ end
 		while ~correct && vbl < tStart + 60
 			if KbCheck; break; end
 			if tMF.eventAvail % check we have touch event[s]
-				tMF.window.X = ball.xFinalD;
-				tMF.window.Y = ball.yFinalD;
-				tch = checkTouchWindows(tMF); % check we are in touch window
-				if tch; inTouch = true; end
-				e = tMF.event;
-				nowX = tMF.x; nowY = tMF.y;
-				if e.Type == 4 % this is a RELEASE event
-					if in.verbose; fprintf('>>>RELEASE X: %.1f Y: %.1f \n',nowX,nowY); end
-					if length(tx) >= 3 %collected enough samples
-						ln = length(tx); if ln > iv; ln = iv; end
-						xy = [tx(end-(ln-1):end)' ty(end-(ln-1):end)'];
-						vx = mean(diff(xy(:,1))) * ln * in.sensitivity;
-						vy = mean(diff(xy(:,2))) * ln * in.sensitivity;
-						av = vx / 2;
-						x = xy(end,1);
-						y = xy(end,2);
-						if in.verbose; fprintf('>>>UPDATE X%i: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f Y: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f A: %.1f\n', ...
-							ln, ball.xFinal, e.MappedX, anim.x, x, vx, ball.yFinal, e.MappedY, anim.y, y, vy, av); end
-						anim.editBody(ballb,x,y,vx,vy,av);
-					end
-					step(anim);
-					ball.updateXY(anim.x(1), anim.y(1), true);
-					a = anim.angularVelocity(ballidx);
-					ball.angleOut = ball.angleOut + (rad2deg(a) * anim.timeDelta);
-					xy = []; tx = []; ty = []; inTouch = false;
-				elseif inTouch && ~isempty(e) && e.Type > 1 && e.Type < 4
-					if nowY > fLimit % make sure we don't move below the floor
-						nowY = fLimit;
-						ball.updateXY(e.MappedX, toPixels(s,fLimit,'y'), false);
-					elseif nowY < cLimit
-						nowY = cLimit;
-						ball.updateXY(e.MappedX, toPixels(s,cLimit,'y'), false);
-					elseif nowX < lLimit
-						nowX = lLimit;
-						ball.updateXY(toPixels(s,lLimit,'x'), e.MappedY, false);
-					elseif nowX > rLimit
-						nowX = rLimit;
-						ball.updateXY(toPixels(s,rLimit,'x'), e.MappedY, false);
-					else
-						ball.updateXY(e.MappedX, e.MappedY, false);
-					end
-					tx = [tx nowX];
-					ty = [ty nowY];
-					anim.editBody(ballb,nowX,nowY);
-				else
-					step(anim);
-					ball.updateXY(anim.x(1), anim.y(1), true);
-					ball2.updateXY(anim.x(2), anim.y(2), true);
-					a = anim.angularVelocity(ballidx);
-					ball.angleOut = ball.angleOut + (rad2deg(a) * anim.timeDelta);
-				end
+				processFront();
 			else % no touch events are available, just run the physics engine
 				step(anim);
 				ball.updateXY(anim.x(1), anim.y(1), true);
-				ball2.updateXY(anim.x(2), anim.y(2), true);
 				a = anim.angularVelocity(ballidx);
 				ball.angleOut = ball.angleOut + (rad2deg(a) * anim.timeDelta);
+				if length(anim.x)==2
+					ball2.updateXY(anim.x(2), anim.y(2), true);
+					a = anim.angularVelocity(ball2idx);
+					ball2.angleOut = ball2.angleOut + (rad2deg(a) * anim.timeDelta);
+				end
 			end
 			[coll, otherBody] = isCollision(anim, ballb); % check collisions
 			if coll && otherBody.hashCode == anim.bodies(rwbidx).hash
@@ -336,7 +295,7 @@ end
 				e = tMF.event;
 				nowX = tMF.x; nowY = tMF.y;
 				if e.Type == 4 % this is a RELEASE event
-					if in.verbose; fprintf('>>>RELEASE X: %.1f Y: %.1f \n',nowX,nowY); end
+					if in.verbose; fprintf('≣≣≣≣⊱ RELEASE X: %.1f Y: %.1f \n',nowX,nowY); end
 					if length(tx) >= 3 %collect enough samples
 						ln = length(tx); if ln > iv; ln = iv; end
 						xy = [tx(end-(ln-1):end)' ty(end-(ln-1):end)'];
@@ -345,7 +304,7 @@ end
 						av = vx / 2;
 						x = xy(end,1);
 						y = xy(end,2);
-						if in.verbose; fprintf('>>>UPDATE X%i: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f Y: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f A: %.1f\n', ...
+						if in.verbose; fprintf('≣≣≣≣⊱ UPDATE X%i: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f Y: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f A: %.1f\n', ...
 							ln, ball.xFinal, e.MappedX, anim.x, x, vx, ball.yFinal, e.MappedY, anim.y, y, vy, av); end
 						anim.editBody(ballb,x,y,vx,vy,av);
 					end
@@ -427,7 +386,7 @@ end
 				e = tMF.event;
 				nowX = tMF.x; nowY = tMF.y;
 				if e.Type == 4 % this is a RELEASE event
-					if in.verbose; fprintf('>>>RELEASE X: %.1f Y: %.1f \n',nowX,nowY); end
+					if in.verbose; fprintf('≣≣≣≣⊱ RELEASE X: %.1f Y: %.1f \n',nowX,nowY); end
 					if length(tx) >= 3 %collect enough samples
 						ln = length(tx); if ln > iv; ln = iv; end
 						xy = [tx(end-(ln-1):end)' ty(end-(ln-1):end)'];
@@ -436,7 +395,7 @@ end
 						av = vx / 2;
 						x = xy(end,1);
 						y = xy(end,2);
-						if in.verbose; fprintf('>>>UPDATE X%i: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f Y: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f A: %.1f\n', ...
+						if in.verbose; fprintf('≣≣≣≣⊱ UPDATE X%i: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f Y: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f A: %.1f\n', ...
 							ln, ball.xFinal, e.MappedX, anim.x, x, vx, ball.yFinal, e.MappedY, anim.y, y, vy, av); end
 						anim.editBody(ballb,x,y,vx,vy,av);
 					end
@@ -518,7 +477,7 @@ end
 				e = tMF.event;
 				nowX = tMF.x; nowY = tMF.y;
 				if e.Type == 4 % this is a RELEASE event
-					if in.verbose; fprintf('>>>RELEASE X: %.1f Y: %.1f \n',nowX,nowY); end
+					if in.verbose; fprintf('≣≣≣≣⊱ RELEASE X: %.1f Y: %.1f \n',nowX,nowY); end
 					if length(tx) >= 3 %collect enough samples
 						ln = length(tx); if ln > iv; ln = iv; end
 						xy = [tx(end-(ln-1):end)' ty(end-(ln-1):end)'];
@@ -527,7 +486,7 @@ end
 						av = vx / 2;
 						x = xy(end,1);
 						y = xy(end,2);
-						if in.verbose; fprintf('>>>UPDATE X%i: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f Y: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f A: %.1f\n', ...
+						if in.verbose; fprintf('≣≣≣≣⊱ UPDATE X%i: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f Y: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f A: %.1f\n', ...
 							ln, ball.xFinal, e.MappedX, anim.x, x, vx, ball.yFinal, e.MappedY, anim.y, y, vy, av); end
 						anim.editBody(ballb,x,y,vx,vy,av);
 					end
@@ -597,6 +556,118 @@ end
 		end
 	end
 
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	function processFront()
+		tM = tMF;
+		tM.window.X = ball.xFinalD;
+		tM.window.Y = ball.yFinalD;
+		tch = checkTouchWindows(tM); % check we are in touch window
+		if tch; inTouch = true; end
+		e = tM.event;
+		nowX = tM.x; nowY = tM.y;
+		if e.Type == 4 % this is a RELEASE event
+			if in.verbose; fprintf('≣≣≣≣⊱ RELEASE X: %.1f Y: %.1f \n',nowX,nowY); end
+			if length(tx) >= 3 %collected enough samples
+				ln = length(tx); if ln > iv; ln = iv; end
+				xy = [tx(end-(ln-1):end)' ty(end-(ln-1):end)'];
+				vx = mean(diff(xy(:,1))) * ln * in.sensitivity;
+				vy = mean(diff(xy(:,2))) * ln * in.sensitivity;
+				av = vx / 2;
+				x = xy(end,1);
+				y = xy(end,2);
+				if in.verbose; fprintf('≣≣≣≣⊱ UPDATE X%i: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f Y: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f A: %.1f\n', ...
+					ln, ball.xFinal, e.MappedX, anim.x, x, vx, ball.yFinal, e.MappedY, anim.y, y, vy, av); end
+				anim.editBody(ballb,x,y,vx,vy,av);
+			end
+			step(anim);
+			ball.updateXY(anim.x(1), anim.y(1), true);
+			a = anim.angularVelocity(ballidx);
+			ball.angleOut = ball.angleOut + (rad2deg(a) * anim.timeDelta);
+			xy = []; tx = []; ty = []; inTouch = false;
+		elseif inTouch && ~isempty(e) && e.Type > 1 && e.Type < 4
+			if nowY > fLimit % make sure we don't move below the floor
+				nowY = fLimit;
+				ball.updateXY(e.MappedX, toPixels(s,fLimit,'y'), false);
+			elseif nowY < cLimit
+				nowY = cLimit;
+				ball.updateXY(e.MappedX, toPixels(s,cLimit,'y'), false);
+			elseif nowX < lLimit
+				nowX = lLimit;
+				ball.updateXY(toPixels(s,lLimit,'x'), e.MappedY, false);
+			elseif nowX > rLimit
+				nowX = rLimit;
+				ball.updateXY(toPixels(s,rLimit,'x'), e.MappedY, false);
+			else
+				ball.updateXY(e.MappedX, e.MappedY, false);
+			end
+			tx = [tx nowX];
+			ty = [ty nowY];
+			anim.editBody(ballb,nowX,nowY);
+		else
+			step(anim);
+			ball.updateXY(anim.x(1), anim.y(1), true);
+			ball2.updateXY(anim.x(2), anim.y(2), true);
+			a = anim.angularVelocity(ballidx);
+			ball.angleOut = ball.angleOut + (rad2deg(a) * anim.timeDelta);
+		end
+	end
+
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	function processBack()
+		tM = tMB;
+		tM.window.X = ball.xFinalD;
+		tM.window.Y = ball.yFinalD;
+		tch = checkTouchWindows(tM); % check we are in touch window
+		if tch; inTouch = true; end
+		e = tM.event;
+		nowX = tM.x; nowY = tM.y;
+		if e.Type == 4 % this is a RELEASE event
+			if in.verbose; fprintf('≣≣≣≣⊱ RELEASE X: %.1f Y: %.1f \n',nowX,nowY); end
+			if length(tx) >= 3 %collected enough samples
+				ln = length(tx); if ln > iv; ln = iv; end
+				xy = [tx(end-(ln-1):end)' ty(end-(ln-1):end)'];
+				vx = mean(diff(xy(:,1))) * ln * in.sensitivity;
+				vy = mean(diff(xy(:,2))) * ln * in.sensitivity;
+				av = vx / 2;
+				x = xy(end,1);
+				y = xy(end,2);
+				if in.verbose; fprintf('≣≣≣≣⊱ UPDATE X%i: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f Y: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f A: %.1f\n', ...
+					ln, ball.xFinal, e.MappedX, anim.x, x, vx, ball.yFinal, e.MappedY, anim.y, y, vy, av); end
+				anim.editBody(ballb,x,y,vx,vy,av);
+			end
+			step(anim);
+			ball.updateXY(anim.x(1), anim.y(1), true);
+			a = anim.angularVelocity(ballidx);
+			ball.angleOut = ball.angleOut + (rad2deg(a) * anim.timeDelta);
+			xy = []; tx = []; ty = []; inTouch = false;
+		elseif inTouch && ~isempty(e) && e.Type > 1 && e.Type < 4
+			if nowY > fLimit % make sure we don't move below the floor
+				nowY = fLimit;
+				ball.updateXY(e.MappedX, toPixels(s,fLimit,'y'), false);
+			elseif nowY < cLimit
+				nowY = cLimit;
+				ball.updateXY(e.MappedX, toPixels(s,cLimit,'y'), false);
+			elseif nowX < lLimit
+				nowX = lLimit;
+				ball.updateXY(toPixels(s,lLimit,'x'), e.MappedY, false);
+			elseif nowX > rLimit
+				nowX = rLimit;
+				ball.updateXY(toPixels(s,rLimit,'x'), e.MappedY, false);
+			else
+				ball.updateXY(e.MappedX, e.MappedY, false);
+			end
+			tx = [tx nowX];
+			ty = [ty nowY];
+			anim.editBody(ballb,nowX,nowY);
+		else
+			step(anim);
+			ball.updateXY(anim.x(1), anim.y(1), true);
+			ball2.updateXY(anim.x(2), anim.y(2), true);
+			a = anim.angularVelocity(ballidx);
+			ball.angleOut = ball.angleOut + (rad2deg(a) * anim.timeDelta);
+		end
+	end
+
 	function updateFrame()
 		results.anidata(jj).t =  [results.anidata(jj).t, anim.timeStep];
 		results.anidata(jj).x =  [results.anidata(jj).x, anim.x(1)];
@@ -623,10 +694,10 @@ end
 			flip(s);
 			giveReward(rwdFront);
 			beep(aM, 3000,0.1,0.1);
-			disp('--->>> CORRECT');
+			disp('≣≣≣≣⊱ CORRECT');
 			WaitSecs('Yieldsecs',2);
 		else
-			disp('--->>> FAIL');
+			disp('≣≣≣≣⊱ FAIL');
 			beep(aM, 300,0.5,0.5);
 			drawBackground(s, [0.6 0.3 0.3]);
 			flip(s);
