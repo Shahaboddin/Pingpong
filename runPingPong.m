@@ -4,6 +4,7 @@ if ~exist('in','var'); error('Need to run this from the GUI!'); end
 
 try 
 	in.task = lower(in.task);
+	in.side = lower(in.side);
 	s = screenManager('distance',in.distance,'pixelsPerCm',in.ppc);
 	s.backgroundColour = [0 0 0];
 	if max(Screen('Screens')) == 0; s.windowed = [0 0 1000 800]; s.specialFlags = 0; end
@@ -26,6 +27,7 @@ try
 	if ~aM.isSetup;	aM.setup; end
 	
 	%==============================================BALLS and PEDESTALS
+	% PEDESTALS
 	ped1 = barStimulus('name','ped1');
 	ped1.colour = in.wallColour;
 	ped1.alpha = 1.0;
@@ -86,8 +88,10 @@ try
 	%===add pedestals and ball to physics simulation
 	anim.addBody(ped1,'Rectangle','infinite');
 	anim.addBody(ped2,'Rectangle','infinite');
-	if matches(in.task, ["control", "cooperationtime"])
+	if ~matches(in.task, ["control", "cooperation","competition"])
 		anim.addBody(dwall,'Rectangle','infinite');
+	else
+		anim.addBody(dwall,'Rectangle','sensor'); %cannot collide with sensor
 	end
 
 	%===get our wall bodies we can use for collision analysis
@@ -156,7 +160,7 @@ try
 	RestrictKeysForKbCheck(KbName('ESCAPE'));
 	subject = [in.subjecta '-' in.subjectb];
 	[pth, sID, dID, name] = getALF(s, subject,'CognitionPlatform',true); %me, subject, lab, create
-	fileName = [name '.mat'];
+	fileName = [pth 'PingPong' name '.mat'];
 
 	%===============================================bump our priority
 	Priority(1);
@@ -167,6 +171,24 @@ try
 	results = struct('N',[],'correct',[],'wallPos',[],...
 		'RT',[],'date',dID,'name',fileName,...
 		'anidata',anidata);
+
+	%===============================================LOGIC FOR TASKS
+	onlyFront = false; onlyBack = false; bothSides = false;
+	if matches(in.side,'back')
+		onlyBack = true;
+	elseif matches(in.side,'front')
+		onlyFront = true;
+	elseif matches(in.side,'both')
+		bothSides = true;
+	elseif in.dummy
+		bothSides = true;
+	end
+	if matches(in.task,["coaction","cooperation","cooperationtime","competition"]) && ~bothSides
+		warning("For these Tasks you must use both sides of the touch screen!!!")
+		onlyFront = false; onlyBack = false; bothSides = true;
+	end
+
+	coopPhase = 1;
 	
 	%===============================================
 	%===============================================
@@ -175,12 +197,65 @@ try
 
 		results.anidata(jj).N = jj;
 		fprintf('≣≣≣≣⊱ Trial: %i\n', jj);
-		ball.xPositionOut = startx;
-		ball.yPositionOut = starty;
+
+		switch (in.task)
+			case 'control'
+				hide(dwall);
+				if onlyBack
+					hide(ball);
+					show(ball2);
+					ball.xPositionOut = 0;
+					ball.yPositionOut = -100;
+					ball2.xPositionOut = startx2;
+					ball2.yPositionOut = starty2;
+				elseif onlyFront
+					hide(ball2);
+					show(ball);
+					ball.xPositionOut = startx;
+					ball.yPositionOut = starty;
+					ball2.xPositionOut = 0;
+					ball2.yPositionOut = -100;
+				end
+			case 'coaction'
+				show(dwall);
+				show(ball);
+				show(ball2);
+				ball.xPositionOut = startx;
+				ball.yPositionOut = starty;
+				ball2.xPositionOut = startx2;
+				ball2.yPositionOut = starty2;
+			case 'cooperation'
+				coopPhase = 1; % there are two phases, 1 is monkeyA and 2 is monkeyB
+				hide(dwall);
+				show(ball)
+				hide(ball2)
+				ball.xPositionOut = startx;
+				ball.yPositionOut = starty;
+				ball2.xPositionOut = startx2;
+				ball2.yPositionOut = -100;
+			case 'cooperationtime'
+				show(dwall);
+				show(ball);
+				show(ball2);
+				ball.xPositionOut = startx;
+				ball.yPositionOut = starty;
+				ball2.xPositionOut = startx2;
+				ball2.yPositionOut = starty2;
+			case 'competition'
+				hide(dwall);
+				show(ball)
+				show(ball2)
+				ball.xPositionOut = startx;
+				ball.yPositionOut = starty;
+				ball2.xPositionOut = startx2;
+				ball2.yPositionOut = starty2;
+		end
+		
+		edit(walls, 1:walls.n, 'colourOut', in.wallColour);
 		ball.update;
-		ball2.xPositionOut = startx2;
-		ball2.yPositionOut = starty2;
 		ball2.update;
+		walls.update;
+
 		try ballb.setGravityScale(1); end
 		try ball2b.setGravityScale(1); end
 		
@@ -189,9 +264,9 @@ try
 		tMB.window.X = ball2.xFinalD;
 		tMB.window.Y = ball2.yFinalD;
 		
-		% the animator needs to be updated to the ball on each trial
+		% the animator needs to be updated to reset the physics world
 		update(anim);
-		
+
 		xy = []; tx = []; ty = []; iv = round(sv.fps/5);
 		nowX = NaN; nowY = NaN;
 		evt = []; evtB = [];
@@ -206,12 +281,17 @@ try
 		needStepF = false;
 		needStepB = false;
 		drawBackground(s, s.backgroundColour);
-		flush(tMF); flush(tMB)
+		flush(tMF); flush(tMB);
+
+		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%RUN OUR TRIAL
+		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		vbl = flip(s); tStart = vbl;
-		
-		switch lower(in.task)
+		switch (in.task)
 			case 'control'
 				doControl();
+			case 'coaction'
+				doCoaction();
 			case 'cooperation'
 				doCooperation()
 			case 'cooperationtime'
@@ -219,6 +299,9 @@ try
 			case 'competition'
 				doCompetition()
 		end
+		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 		if KbCheck; break; end
 
@@ -246,11 +329,14 @@ try
 
 catch ERR
 	getReport(ERR);
-	Priority(0);
+	Priority(0); ShowCursor;
 	RestrictKeysForKbCheck([]);
 	try anim.reset; end
 	try tMF.close; end
-	try ball.reset; end
+	try tMB.close; end
+	try rwdFront.close; end
+	try rwdBack.close; end
+	try ball.reset; ball2.reset; end
 	try s.close; end
 	try sca; end
 	rethrow(ERR);
@@ -261,20 +347,26 @@ end
 		while ~correct && vbl < tStart + 60
 			if KbCheck; break; end
 			needStepF = false; needStepB = false;
-			processFront();
-			%processBack();
+			if onlyFront && ~correctCollideF
+				processFront();
+			elseif onlyBack && ~correctCollideB
+				processBack();
+			elseif bothSides
+				warning('Wrong settings!');
+			end 
 			doStep();
-			[coll, otherBody] = isCollision(anim, ballb); % check collisions
-			if coll && otherBody.hashCode == anim.bodies(rwbidx).hash
-				correctCollideF = true;
-			elseif coll && otherBody.hashCode == anim.bodies(lwbidx).hash
-				incorrectCollideF = true;
+			if ~correctCollideF || ~correctCollideB
+				checkWalls();
 			end
 			if correctCollideF
+				walls{3}.colourOut = [0.3 0.7 0 1]; walls{3}.refreshTexture();
 				ballb.setGravityScale(100);
 				countDown = countDown - 1;
 				if countDown == 0
 					correct = true;
+					walls{3}.colourOut = [in.wallColour]; walls{3}.refreshTexture();
+					hide(ball);
+					flip(s);
 				end
 			elseif incorrectCollideF
 				ballb.setGravityScale(100);
@@ -283,8 +375,8 @@ end
 					break;
 				end
 			end
-			draw(ball);
-			draw(ball2);
+			if onlyFront; draw(ball); end
+			if onlyBack; draw(ball2); end
 			draw(walls);
 			if in.verbose; drawGrid(s);drawScreenCenter(s);end
 			vbl = flip(s, vbl + sv.halfifi);
@@ -567,14 +659,16 @@ end
 			giveReward(rwdFront);
 			beep(aM, 3000,0.1,0.1);
 			disp('≣≣≣≣⊱ CORRECT');
-			WaitSecs('Yieldsecs',2);
+			WaitSecs('Yieldsecs',1);
 		else
 			disp('≣≣≣≣⊱ FAIL');
-			beep(aM, 300,0.5,0.5);
+			beep(aM, 400,0.7,0.7);
 			drawBackground(s, [0.6 0.3 0.3]);
 			flip(s);
 			WaitSecs('Yieldsecs',3);
 		end
+
+		draw(walls); flip(s); WaitSecs(0.1);
 	
 		plot(in.axis1, results.anidata(end).x,results.anidata(end).y,'-');
 		if isfield(results.anidata,'x2')
