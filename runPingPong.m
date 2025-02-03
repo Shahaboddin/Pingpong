@@ -1,26 +1,33 @@
 function runPingPong(in)
 
 if ~exist('in','var'); error('Need to run this from the GUI!'); end
+cla(in.axis1); cla(in.axis2); drawnow;
+commandwindow;
+
+in.task = lower(in.task);
+in.side = lower(in.side);
+mult = 1;
 
 try 
-	in.task = lower(in.task);
-	in.side = lower(in.side);
 	s = screenManager('distance',in.distance,'pixelsPerCm',in.ppc);
 	s.backgroundColour = [0 0 0];
 	if max(Screen('Screens')) == 0 && in.verbose
 		PsychDebugWindowConfiguration([],0.6);
 	end
 	sv = open(s);
+	% [left, top, right, bottom]
+	frontHalf = [sv.leftInDegrees sv.topInDegrees 0 sv.bottomInDegrees];
+	backHalf = [0 sv.topInDegrees sv.rightInDegrees sv.bottomInDegrees];
 	
 	%==============================================Arduino initialization
-	rwdFront = arduinoManager('port',in.arduinoa,'shield','new');
+	rwdFront = arduinoManager('port',in.arduinoa,'shield','new','verbose',in.verbose);
 	if isempty(in.arduinoa); rwdFront.silentMode = true; end
 	rwdFront.open;
 
-	rwdBack = arduinoManager('port',in.arduinob,'shield','new');
+	rwdBack = arduinoManager('port',in.arduinob,'shield','new','verbose',in.verbose);
 	if isempty(in.arduinob); rwdBack.silentMode = true; end
 	rwdBack.open;
-	
+
 	%==============================================Audio Manager
 	if ~exist('aM','var') || isempty(aM) || ~isa(aM,'audioManager')
 		aM = audioManager;
@@ -29,7 +36,7 @@ try
 	if ~aM.isSetup;	aM.setup; end
 	
 	%==============================================BALLS and PEDESTALS
-	% PEDESTALS
+	%===PEDESTALS
 	ped1 = barStimulus('name','ped1');
 	ped1.colour = in.wallColour;
 	ped1.alpha = 1.0;
@@ -43,7 +50,7 @@ try
 	ped2.name = 'ped2';
 	ped2.xPosition = in.startB;
 
-	% DIVIDER WALL(S)
+	%===DIVIDER WALL(S)
 	dwallF = clone(ped1);
 	dwallF.name = 'dwallF';
 	dwallF.barWidth = in.dWidth/2;
@@ -54,7 +61,7 @@ try
 	dwallB.name = 'dwallB';
 	dwallB.xPosition = 0 + (dwallB.barWidth/2);
 
-	% BALLS
+	%===BALLS
 	ballF = imageStimulus('name','ballF');
 	ballF.filePath = in.image;
 	ballF.xPosition = in.startA;
@@ -64,6 +71,7 @@ try
 	ballF.size = in.ballSize;
 	ballB = clone(ballF);
 	ballB.name = 'ballB';
+	%ballB.filePath = 'moon.png';
 	ballB.xPosition = in.startB;
 	radius = ballF.size/2;
 	startx = ballF.xPosition; starty = ballF.yPosition;
@@ -73,7 +81,7 @@ try
 	
 	%===============================================ANIMATION MANAGER
 	anim = animationManager('verbose', in.verbose);
-	anim.timeDelta = sv.ifi*2;
+	anim.timeDelta = sv.ifi * mult;
 	anim.rigidParams.linearDamping = in.linearD;
 	
 	%===this creates 4 walls, returns a metaStimulus we can use to draw the walls visually
@@ -136,7 +144,7 @@ try
 	limits(4).id = "xgt"; %rightwall
 	limits(4).val = walls{3}.xPosition - (walls{3}.barWidth/2) - radius;
 	limits(4).pxval = toPixels(s,limits(4).val,'x');
-	% divider limits
+	%===divider limits
 	limits(5).id = "xgt";
 	limits(5).val = walls{7}.xPosition - (walls{7}.barWidth/2) - radius;
 	limits(5).pxval = toPixels(s,limits(5).val,'x');
@@ -151,8 +159,8 @@ try
 	limits(8).pxval = toPixels(s,limits(8).val,'x');
 	
 	%===============================================TOUCH MANAGER
-	%front
-	tMF = touchManager('device',1,'panelType',1,...
+	%===front
+	tMF = touchManager('device',1,'panelType',1,'name','FRONT',...
 		'isDummy',in.dummy,'verbose',in.verbose);
 	tMF.window.radius = radius; % taken from the ball
 	tMF.window.X = startx; % lock to the ball position
@@ -160,8 +168,8 @@ try
 	setup(tMF, s);
 	createQueue(tMF);
 	start(tMF);
-	%back
-	tMB = touchManager('device',2,'panelType',2,...
+	%===back
+	tMB = touchManager('device',2,'panelType',2,'name','BACK',...
 		'isDummy',in.dummy,'verbose',in.verbose);
 	tMB.window.radius = radius; % taken from the ball
 	tMB.window.X = startx2; % lock to the ball position
@@ -172,8 +180,8 @@ try
 	start(tMB);
 	
 	%===============================================setup some other parameters
-	nTrials = 100;
-	nCorrect = 0;
+	nCorrectF = 0;
+	nCorrectB = 0;
 	RestrictKeysForKbCheck(KbName('ESCAPE'));
 	subject = [in.subjecta '-' in.subjectb];
 	[pth, sID, dID, name] = getALF(s, subject,'CognitionPlatform',true); %me, subject, lab, create
@@ -204,20 +212,21 @@ try
 		warning("For these Tasks you must use both sides of the touch screen!!!")
 		onlyFront = false; onlyBack = false; bothSides = true;
 	end
-
-	coopPhase = 1;
 	
 	%===============================================
 	%===============================================
 	%===============================================
-	for jj = 1:nTrials
+	for jj = 1:in.ntrials
 
 		results.anidata(jj).N = jj;
 		fprintf('≣≣≣≣⊱ Trial: %i\n', jj);
 
+		%===Task Logic for each task
 		switch (in.task)
 			case 'control'
+				anim.setSensorState('ballF',false);anim.setSensorState('ballB',false);
 				hide(dwallF); hide(dwallB);
+				splitScreen = false;
 				if onlyBack
 					hide(ballF);
 					show(ballB);
@@ -238,6 +247,8 @@ try
 					anim.setSensorState('ballB',true);
 				end
 			case 'coaction'
+				anim.setSensorState('ballF',false);anim.setSensorState('ballB',false);
+				splitScreen = true;
 				show(dwallF); show(dwallB);
 				show(ballF);
 				show(ballB);
@@ -248,8 +259,10 @@ try
 				anim.editBody(ballFb,startx,starty);
 				anim.editBody(ballBb,startx2,starty2);
 			case 'cooperation'
+				anim.setSensorState('ballF',false);anim.setSensorState('ballB',false);
+				splitScreen = false;
 				coopPhase = 1; % there are two phases, 1 is monkeyA and 2 is monkeyB
-				hide(dwall);
+				hide(dwallF); hide(dwallB);
 				show(ballF)
 				hide(ballB)
 				ballF.xPositionOut = startx;
@@ -259,7 +272,9 @@ try
 				anim.editBody(ballFb,startx,starty);
 				anim.editBody(ballBb,-100,starty2);
 			case 'cooperationtime'
-				show(dwall);
+				anim.setSensorState('ballF',false);anim.setSensorState('ballB',false);
+				splitScreen = true;
+				show(dwallF); show(dwallB);
 				show(ballF);
 				show(ballB);
 				ballF.xPositionOut = startx;
@@ -269,8 +284,10 @@ try
 				anim.editBody(ballFb,startx,starty);
 				anim.editBody(ballBb,startx2,starty2);
 			case 'competition'
-				show(dwall);
-				show(ballF)
+				anim.setSensorState('ballF',false);anim.setSensorState('ballB',false);
+				splitScreen = true;
+				show(dwallF); show(dwallB);
+					show(ballF)
 				show(ballB)
 				ballF.xPositionOut = startx;
 				ballF.yPositionOut = starty;
@@ -280,6 +297,7 @@ try
 				anim.editBody(ballBb,startx2,starty2);
 		end
 		
+		ballF.alphaOut = 1; ballB.alphaOut = 1;
 		edit(walls, 1:walls.n, 'colourOut', in.wallColour);
 		ballF.update();
 		ballB.update();
@@ -288,22 +306,26 @@ try
 		try ballFb.setGravityScale(1); end
 		try ballBb.setGravityScale(1); end
 		
-		% update touchManager window with ball positions
+		%===update touchManager window with ball positions
 		tMF.window.X = ballF.xFinalD;
 		tMF.window.Y = ballF.yFinalD;
 		tMB.window.X = ballB.xFinalD;
 		tMB.window.Y = ballB.yFinalD;
 		
-		% the animator needs to be updated to reset the physics world
+		%===the animator needs to be updated to reset the physics world
 		anim.update();
 
+		%===trial variables
+		coopPhase = 1;
+		coopTimer = NaN;
+		timerF = NaN; timerB = NaN;
 		xy = []; tx = []; ty = []; iv = round(sv.fps/5);
 		nowX = NaN; nowY = NaN;
 		evt = []; evtB = [];
 		collF = false; otherBodyF = [];
 		collB = false; otherBodyB = [];
 		correct = false; correctF = false; correctB = false;
-		countDownF = 60; countDownB = 60;
+		countDownF = 20; countDownB = 20;
 		correctCollideF = false;
 		incorrectCollideF = false;
 		correctCollideB = false;
@@ -312,24 +334,28 @@ try
 		inTouchB = false;
 		stepF = false;
 		stepB = false;
+
+		%===Prep
 		drawBackground(s, s.backgroundColour);
-		flush(tMF); flush(tMB);
+		flush(tMF); flush(tMB); % flush touch managers
 
 		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%RUN OUR TRIAL
 		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		draw(walls);
 		vbl = flip(s); tStart = vbl;
 		switch (in.task)
 			case 'control'
 				doControl();
 			case 'coaction'
 				doCoaction();
+				if correctF || correctB; correct = true; end
 			case 'cooperation'
-				doCooperation()
+				doCooperation();
 			case 'cooperationtime'
-				doCooperationTime()
+				doCooperationTime();
 			case 'competition'
-				doCompetition()
+				doCompetition();
 		end
 		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -378,7 +404,7 @@ end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function doControl()
-		while ~correct && vbl < tStart + 60
+		while ~correct && vbl < tStart + in.trialtime
 			if KbCheck; break; end
 			stepF = false; stepB = false;
 			if onlyFront && (~incorrectCollideF && ~correctCollideF)
@@ -423,7 +449,7 @@ end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function doCoaction()
-		while ~correct && vbl < tStart + 60
+		while ~correct && vbl < tStart + in.trialtime
 			if KbCheck; break; end
 			stepF = false; stepB = false;
 			processFront(); processBack();
@@ -431,8 +457,56 @@ end
 			[collB, otherBodyB] = isCollision(anim, ballBb); % check collisions
 			doStep();
 			checkDivider();
-			updateWalls();
+			updateDivider();
 			draw(ballF); draw(ballB); 
+			draw(walls);
+			if in.verbose; drawGrid(s); drawScreenCenter(s); end
+			vbl = flip(s, vbl + sv.halfifi);
+			% save all animation data for each trial, we can use this to "play
+			% back" the action performed by the monkey
+			updateFrame();
+			if countDownF == 0 || countDownB == 0
+				if correctCollideF
+					correctF = true;
+				end
+				if correctCollideB
+					correctB = true;
+				end
+				if correctF && correctB
+					break
+				end
+				if incorrectCollideF || incorrectCollideB
+					break
+				end
+			end 
+		end
+	end
+
+		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	function doCooperation()
+		while ~correct && vbl < tStart + in.trialtime
+			if KbCheck; break; end
+			stepF = false; stepB = false;
+			if onlyFront && (~incorrectCollideF && ~correctCollideF)
+				processFront();
+				doStep();
+				[collF, otherBodyF] = isCollision(anim, ballFb); % check collisions
+				checkWallsF();
+			elseif onlyBack && (~incorrectCollideB && ~correctCollideB)
+				processBack();
+				doStep();
+				[collB, otherBodyB] = isCollision(anim, ballBb); % check collisions
+				checkWallsB();
+			else
+				if onlyFront; stepF = true; else; stepB = true; end
+				doStep();
+			end 
+			updateWalls();
+			if onlyFront
+				draw(ballF); 
+			elseif onlyBack
+				draw(ballB); 
+			end
 			draw(walls);
 			if in.verbose; drawGrid(s); drawScreenCenter(s); end
 			vbl = flip(s, vbl + sv.halfifi);
@@ -455,74 +529,79 @@ end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function doCooperationTime()
-		while ~correct && vbl < tStart + 60
+		while ~correct && vbl < tStart + in.trialtime
 			if KbCheck; break; end
 			stepF = false; stepB = false;
-			if onlyFront && (~incorrectCollideF && ~correctCollideF)
-				processFront();
-				doStep();
-				[coll, otherBody] = isCollision(anim, ballFb); % check collisions
-				checkWallsF();
-			elseif onlyBack && (~incorrectCollideB && ~correctCollideB)
-				processBack();
-				doStep();
-				[coll, otherBody] = isCollision(anim, ballBb); % check collisions
-				checkWallsB();
-			else
-				if onlyFront; stepF = true; else; stepB = true; end
-				doStep();
-			end 
-			updateWalls();
-			if onlyFront
-				draw(ballF); 
-			elseif onlyBack
-				draw(ballB); 
+			processFront(); processBack();
+			[collF, otherBodyF] = isCollision(anim, ballFb); % check collisions
+			[collB, otherBodyB] = isCollision(anim, ballBb); % check collisions
+			doStep();
+			checkDivider();
+			t = NaN; tboth = false;
+			if ~isnan(timerF) && ~isnan(timerB)
+				t = abs(timerF-timerB);
+				tboth = true;
+			elseif ~isnan(timerF) 
+				t = abs(timerF-GetSecs);
+			elseif ~isnan(timerB) 
+				t = abs(timerB-GetSecs);
 			end
+			if tboth && t <= in.cooptime
+				coopTimer = true;
+				fprintf('\n≣≣≣≣⊱ TIMER PASS %.2f\n',t);
+			elseif ~tboth && ~isnan(t) && t >= in.cooptime
+				coopTimer = false;
+				fprintf('\n≣≣≣≣⊱ TIMER FAIL %.2f\n',t);
+			end
+			updateDivider();
+			draw(ballF); draw(ballB); 
 			draw(walls);
 			if in.verbose; drawGrid(s); drawScreenCenter(s); end
 			vbl = flip(s, vbl + sv.halfifi);
 			% save all animation data for each trial, we can use this to "play
 			% back" the action performed by the monkey
 			updateFrame();
-			if countDownF == 0 || countDownB == 0
-				if correctCollideF
-					correct = true; correctF = true; break
-				end
-				if correctCollideB
-					correct = true; correctB = true; break
-				end
-				if incorrectCollideF || incorrectCollideB
-					break
-				end
-			end 
+			if coopTimer == true
+				correctF = true;
+				correctB = true;
+				correct = true;
+				break
+			elseif coopTimer == false
+				correctF = false;
+				correctB = false;
+				correct = false;
+				break
+			end
+			if incorrectCollideF || incorrectCollideB
+				break
+			end
 		end
 	end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function doCompetition()
-		while ~correct && vbl < tStart + 60
+		while ~correct && vbl < tStart + in.trialtime
 			if KbCheck; break; end
 			stepF = false; stepB = false;
-			if onlyFront && (~incorrectCollideF && ~correctCollideF)
-				processFront();
-				doStep();
-				[coll, otherBody] = isCollision(anim, ballFb); % check collisions
-				checkWallsF();
-			elseif onlyBack && (~incorrectCollideB && ~correctCollideB)
-				processBack();
-				doStep();
-				[coll, otherBody] = isCollision(anim, ballBb); % check collisions
-				checkWallsB();
-			else
-				if onlyFront; stepF = true; else; stepB = true; end
-				doStep();
-			end 
-			updateWalls();
-			if onlyFront
-				draw(ballF); 
-			elseif onlyBack
-				draw(ballB); 
+			processFront(); processBack();
+			[collF, otherBodyF] = isCollision(anim, ballFb); % check collisions
+			[collB, otherBodyB] = isCollision(anim, ballBb); % check collisions
+			doStep();
+			checkDivider();
+			t = vbl - tStart;
+			if incorrectCollideF
+				fprintf('\n≣≣≣≣⊱ BACK WINS IN %.2f secs\n',t);
+				hide(ballF)
+				anim.setSensorState('ballF',true);
 			end
+			if incorrectCollideB
+				fprintf('\n≣≣≣≣⊱ FRONT WINS IN %.2f secs\n',t);
+				hide(ballB); 
+				anim.setSensorState('ballB',true);
+			end
+			updateDivider();
+			draw(ballF); 
+			draw(ballB); 
 			draw(walls);
 			if in.verbose; drawGrid(s); drawScreenCenter(s); end
 			vbl = flip(s, vbl + sv.halfifi);
@@ -530,11 +609,12 @@ end
 			% back" the action performed by the monkey
 			updateFrame();
 			if countDownF == 0 || countDownB == 0
+				fprintf('\n≣≣≣≣⊱ FINISH @ %.2f secs\n',t);
 				if correctCollideF
-					correct = true; correctF = true; break
+					correct = true; correctF = true; correctB = false; break
 				end
 				if correctCollideB
-					correct = true; correctB = true; break
+					correct = true; correctB = true; correctF = false; break
 				end
 				if incorrectCollideF || incorrectCollideB
 					break
@@ -547,18 +627,19 @@ end
 	function doStep()
 		if stepF || stepB
 			step(anim);
-			x = anim.x; y = anim.y;
+			xF = anim.x(1); yF = anim.y(1);
+			if ~isscalar(anim.x)
+				xB = anim.x(2); yB = anim.y(2);
+			else
+				xB = []; yB = [];
+			end
 			if stepF
-				ballF.updateXY(x(1), y(1), true);
+				ballF.updateXY(xF, yF, true);
 				a = anim.angularVelocity(ballFidx);
 				ballF.angleOut = ballF.angleOut + (rad2deg(a) * anim.timeDelta);
 			end
-			if stepB 
-				if isscalar(x)
-					ballB.updateXY(x, y, true);
-				else
-					ballB.updateXY(x(2), y(2), true);
-				end
+			if stepB && ~isempty(xB)
+				ballB.updateXY(xB, yB, true);
 				a = anim.angularVelocity(ballBidx);
 				ballB.angleOut = ballB.angleOut + (rad2deg(a) * anim.timeDelta);
 			end
@@ -576,7 +657,7 @@ end
 			if tch == true; inTouchF = true; end
 			evt = tM.event;
 			nowX = tM.x; nowY = tM.y;
-			if evt.Type == 4 % this is a RELEASE event
+			if inTouchF && evt.Type == 4 % this is a RELEASE event
 				if in.verbose; fprintf('≣≣≣≣⊱ processFront:RELEASE X: %.1f Y: %.1f \n',nowX,nowY); end
 				if length(tx) >= 3 %collected enough samples
 					ln = length(tx); if ln > iv; ln = iv; end
@@ -586,17 +667,18 @@ end
 					av = vx / 2;
 					x = xy(end,1);
 					y = xy(end,2);
-					if in.verbose; fprintf('≣≣≣≣⊱ processFront:UPDATE X%i: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f Y: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f A: %.1f\n', ...
-						ln, ballF.xFinal, evt.MappedX, anim.x, x, vx, ballF.yFinal, evt.MappedY, anim.y, y, vy, av); end
+					if in.verbose; fprintf('≣≣≣≣⊱ processFront:VELOCITY X:%.1f Y:%.1f X%i: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f Y: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f A: %.1f\n', ...
+						nowX, nowY, ln, ballF.xFinal, evt.MappedX, anim.x, x, vx, ballF.yFinal, evt.MappedY, anim.y, y, vy, av); end
 					anim.editBody(ballFb,x,y,vx,vy,av);
 				end
 				stepF = true;
 				xy = []; tx = []; ty = []; inTouchF = false;
-			elseif inTouchF && ~isempty(evt) && evt.Type > 1 && evt.Type < 4
+			elseif inTouchF && ~isempty(evt) && evt.Type > 0 && evt.Type < 4
 				checkLimits(limits(1:4),ballF,evt);
 				tx = [tx nowX];
 				ty = [ty nowY];
 				anim.editBody(ballFb, nowX, nowY);
+				if in.verbose; fprintf('≣≣≣≣⊱ processFront:TOUCH X: %.1f Y: %.1f \n',nowX,nowY); end
 			else
 				stepF = true;
 			end
@@ -615,7 +697,7 @@ end
 			if tch; inTouchB = true; end
 			evtB = tM.event;
 			nowX = tM.x; nowY = tM.y;
-			if evtB.Type == 4 % this is a RELEASE event
+			if inTouchB && evtB.Type == 4 % this is a RELEASE event
 				if in.verbose; fprintf('≣≣≣≣⊱ processBack:RELEASE X: %.1f Y: %.1f \n',nowX,nowY); end
 				if length(tx) >= 3 %collected enough samples
 					ln = length(tx); if ln > iv; ln = iv; end
@@ -631,7 +713,7 @@ end
 				end
 				stepB = true;
 				xy = []; tx = []; ty = []; inTouchB = false;
-			elseif inTouchB && ~isempty(evtB) && evtB.Type > 1 && evtB.Type < 4
+			elseif inTouchB && ~isempty(evtB) && evtB.Type > 0 && evtB.Type < 4
 				checkLimits(limits(1:4),ballB,evtB);
 				tx = [tx nowX];
 				ty = [ty nowY];
@@ -663,17 +745,17 @@ end
 		if ~isempty(newX) && ~isempty(newY)
 			nowX = newX; nowY = newY;
 			inball.updateXY(pxX, pxY, false);
-		elseif ~isempty(newX) 
-			nowX = newX;
-			inball.updateXY(pxX, inevt.MappedY, false);
-		elseif ~isempty(newY) 
+		elseif ~isempty(newY)
 			nowY = newY;
 			inball.updateXY(inevt.MappedX, pxY, false);
+		elseif ~isempty(newX)
+			nowX = newX;
+			inball.updateXY(pxX, inevt.MappedY, false);
 		else
 			inball.updateXY(inevt.MappedX, inevt.MappedY, false);
 		end
 	end
-
+	
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function checkWallsF()
 		if collF && otherBodyF.hashCode == rwhash
@@ -694,14 +776,23 @@ end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function checkDivider()
-		if collF && ~isempty(otherBodyF) && otherBodyF.hashCode == dwfhash
-			correctCollideF = true;
-		elseif collB && ~isempty(otherBodyB) && otherBodyB.hashCode == dwbhash
-			correctCollideB = true;
-		elseif collF
-			%incorrectCollideF = true;
-		elseif collB
-			%incorrectCollideB = true;
+		if collF && ~incorrectCollideF && ~isempty(otherBodyF) && otherBodyF.hashCode == dwfhash
+			timerF = GetSecs;
+			if matches(in.task,'competition')
+				correctCollideF = true;
+				incorrectCollideB = true; 
+			else
+				correctCollideF = true;
+			end
+		end
+		if collB && ~incorrectCollideB && ~isempty(otherBodyB) && otherBodyB.hashCode == dwbhash
+			timerB = GetSecs;
+			if matches(in.task,'competition')
+				correctCollideB = true;
+				incorrectCollideF=true; 
+			else
+				correctCollideB = true;
+			end
 		end
 	end
 
@@ -710,7 +801,9 @@ end
 		if onlyFront || bothSides
 			if correctCollideF
 				walls{3}.colourOut = [0.3 0.7 0 1]; walls{3}.refreshTexture();
-				ballFb.setGravityScale(100);
+				%ballFb.setGravityScale(100);
+				ballF.alphaOut = ballF.alphaOut - 0.05;
+				if ballF.alphaOut < 0; ballF.alphaOut = 0; end
 				countDownF = countDownF - 1;
 				if countDownF == 0
 					walls{3}.colourOut = [in.wallColour]; walls{3}.refreshTexture();
@@ -718,8 +811,10 @@ end
 					flip(s);
 				end
 			elseif incorrectCollideF
-				walls{1}.colourOut = [1 0 0.3 1]; walls{1}.refreshTexture();
-				ballFb.setGravityScale(100);
+				walls{1}.colourOut = [0.6 0.2 0.2]; walls{1}.refreshTexture();
+				%ballFb.setGravityScale(100);
+				ballF.alphaOut = ballF.alphaOut - 0.05;
+				if ballF.alphaOut < 0; ballF.alphaOut = 0; end
 				countDownF = countDownF - 1;
 				if countDownF == 0
 					walls{1}.colourOut = [in.wallColour]; walls{1}.refreshTexture();
@@ -731,16 +826,20 @@ end
 		if onlyBack || bothSides
 			if correctCollideB
 				walls{1}.colourOut = [0.3 0.7 0 1]; walls{1}.refreshTexture();
-				ballBb.setGravityScale(100);
+				%ballBb.setGravityScale(100);
 				countDownB = countDownB - 1;
+				ballB.alphaOut = ballB.alphaOut - 0.05;
+				if ballB.alphaOut < 0; ballB.alphaOut = 0; end
 				if countDownB == 0
 					walls{1}.colourOut = [in.wallColour]; walls{1}.refreshTexture();
 					hide(ballB); draw(walls);
 					flip(s); 
 				end
 			elseif incorrectCollideB
-				walls{3}.colourOut = [1 0 0.3 1]; walls{3}.refreshTexture();
-				ballBb.setGravityScale(100);
+				walls{3}.colourOut = [0.6 0.2 0.2]; walls{3}.refreshTexture();
+				%ballBb.setGravityScale(100);
+				ballB.alphaOut = ballB.alphaOut - 0.05;
+				if ballB.alphaOut < 0; ballB.alphaOut = 0; end
 				countDownB = countDownB - 1;
 				if countDownB == 0
 					walls{3}.colourOut = [in.wallColour]; walls{3}.refreshTexture();
@@ -755,8 +854,10 @@ end
 	function updateDivider()
 		if onlyFront || bothSides
 			if correctCollideF
+				if matches(in.task,'competition'); hide(ballB); end
 				dwallF.colourOut = [0.3 0.7 0 1]; dwallF.refreshTexture();
-				ballFb.setGravityScale(100);
+				ballF.alphaOut = ballF.alphaOut - 0.05;
+				if ballF.alphaOut < 0; ballF.alphaOut = 0; end
 				countDownF = countDownF - 1;
 				if countDownF == 0
 					dwallF.colourOut = [in.wallColour]; dwallF.refreshTexture();
@@ -766,8 +867,10 @@ end
 		end
 		if onlyBack || bothSides
 			if correctCollideB
+				if matches(in.task,'competition'); hide(ballF); end
 				dwallB.colourOut = [0.3 0.7 0 1]; dwallB.refreshTexture();
-				ballBb.setGravityScale(100);
+				ballB.alphaOut = ballB.alphaOut - 0.05;
+				if ballB.alphaOut < 0; ballB.alphaOut = 0; end
 				countDownB = countDownB - 1;
 				if countDownB == 0
 					dwallB.colourOut = [in.wallColour]; dwallB.refreshTexture();
@@ -798,29 +901,59 @@ end
 		results.correct = [results.correct correct];
 		results.wallPos = [results.wallPos 1];
 		results.RT = [results.RT (tStart - GetSecs)];
+
+		reset(tMF); reset(tMB);
+
+		dwallF.colourOut = [in.wallColour]; dwallF.refreshTexture();
+		dwallB.colourOut = [in.wallColour]; dwallB.refreshTexture();
 	
 		if correct
-			nCorrect = nCorrect + 1;
 			disp('≣≣≣≣⊱ CORRECT');
 			beep(aM, 3000,0.1,0.1);
-			drawBackground(s, [0.3 0.6 0.3]);
-			flip(s);
 			if correctF
+				nCorrectF = nCorrectF + 1;
 				giveReward(rwdFront);
+				if splitScreen
+					drawRect(s, frontHalf,[0.3 0.6 0.3]);
+					if matches(in.task,'competition') || ~correctB
+						drawRect(s, backHalf,[0.6 0.2 0.2]);
+					end
+				else
+					drawBackground(s, [0.3 0.6 0.3]);
+				end
 			end
 			if correctB
+				nCorrectB= nCorrectB + 1;
 				giveReward(rwdBack);
+				if splitScreen
+					drawRect(s, backHalf,[0.3 0.6 0.3]);
+					if matches(in.task,'competition') || ~correctB
+						drawRect(s, frontHalf,[0.6 0.2 0.2]);
+					end
+				else
+					drawBackground(s, [0.3 0.6 0.3]);
+				end
 			end
-			WaitSecs('Yieldsecs',1);
-			drawBackground(s, s.backgroundColour); draw(walls); flip(s); 
-		else
-			disp('≣≣≣≣⊱ FAIL');
-			beep(aM, 400,0.7,0.7);
-			drawBackground(s, [0.6 0.3 0.3]);
+			draw(walls);
 			flip(s);
-			WaitSecs('Yieldsecs',1);
+			WaitSecs('Yieldsecs',0.2);
+			drawBackground(s, s.backgroundColour); draw(walls); flip(s);
+			WaitSecs('Yieldsecs',0.8);
+		else
+			if splitScreen && ~correctF && ~correctB
+				drawRect(s, frontHalf,[0.6 0.2 0.2]);
+				drawRect(s, backHalf,[0.6 0.2 0.2]);
+			elseif splitScreen && ~correctF
+				drawRect(s, frontHalf,[0.6 0.2 0.2]);
+			elseif splitScreen && ~correctB
+				drawRect(s, backHalf,[0.6 0.2 0.2]);
+			else
+				drawBackground(s, [0.6 0.2 0.2]);
+			end
+			draw(walls); flip(s);
+			WaitSecs('Yieldsecs',0.4);
 			drawBackground(s, s.backgroundColour); draw(walls); flip(s); 
-			WaitSecs('Yieldsecs',2);
+			WaitSecs('Yieldsecs',2.6);
 		end
 
 		drawBackground(s, s.backgroundColour); draw(walls); flip(s); 
