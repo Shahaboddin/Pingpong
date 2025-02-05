@@ -259,18 +259,16 @@ try
 				anim.editBody(ballFb,startx,starty);
 				anim.editBody(ballBb,startx2,starty2);
 			case 'cooperation'
-				anim.setSensorState('ballF',false);anim.setSensorState('ballB',false);
 				splitScreen = false;
-				coopPhase = 1; % there are two phases, 1 is monkeyA and 2 is monkeyB
 				hide(dwallF); hide(dwallB);
-				show(ballF)
-				hide(ballB)
+				show(ballF); anim.setSensorState('ballF',false);
+				hide(ballB); anim.setSensorState('ballB',true);
 				ballF.xPositionOut = startx;
 				ballF.yPositionOut = starty;
 				ballB.xPositionOut = startx2;
-				ballB.yPositionOut = -100;
+				ballB.yPositionOut = starty2;
 				anim.editBody(ballFb,startx,starty);
-				anim.editBody(ballBb,-100,starty2);
+				anim.editBody(ballBb,startx2,starty2);
 			case 'cooperationtime'
 				anim.setSensorState('ballF',false);anim.setSensorState('ballB',false);
 				splitScreen = true;
@@ -299,29 +297,28 @@ try
 		
 		ballF.alphaOut = 1; ballB.alphaOut = 1;
 		edit(walls, 1:walls.n, 'colourOut', in.wallColour);
-		ballF.update();
-		ballB.update();
-		walls.update();
+		update(ballF);
+		update(ballB);
+		update(walls);
 
 		try ballFb.setGravityScale(1); end
 		try ballBb.setGravityScale(1); end
 		
-		%===update touchManager window with ball positions
+		%=== Update touchManager window with ball positions
 		tMF.window.X = ballF.xFinalD;
 		tMF.window.Y = ballF.yFinalD;
 		tMB.window.X = ballB.xFinalD;
 		tMB.window.Y = ballB.yFinalD;
 		
-		%===the animator needs to be updated to reset the physics world
+		%=== The animator needs to be updated to reset the physics world
 		anim.update();
 
-		%===trial variables
-		coopPhase = 1;
-		coopTimer = NaN;
+		%=== Initialise Trial Variables
+		coopPhase = 1; % there are two phases, 1 is monkeyA and 2 is monkeyB
+		coopTimer = NaN; % for cooperationTime
 		timerF = NaN; timerB = NaN;
 		xy = []; tx = []; ty = []; iv = round(sv.fps/5);
 		nowX = NaN; nowY = NaN;
-		evt = []; evtB = [];
 		collF = false; otherBodyF = [];
 		collB = false; otherBodyB = [];
 		correct = false; correctF = false; correctB = false;
@@ -330,12 +327,10 @@ try
 		incorrectCollideF = false;
 		correctCollideB = false;
 		incorrectCollideB = false;
-		inTouchF = false;
-		inTouchB = false;
 		stepF = false;
 		stepB = false;
 
-		%===Prep
+		%=== Other Prep
 		drawBackground(s, s.backgroundColour);
 		flush(tMF); flush(tMB); % flush touch managers
 
@@ -403,20 +398,23 @@ catch ERR
 end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function doControl()
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		while ~correct && vbl < tStart + in.trialtime
 			if KbCheck; break; end
 			stepF = false; stepB = false;
 			if onlyFront && (~incorrectCollideF && ~correctCollideF)
-				processFront();
-				doStep();
+				[~, stepF] = processTouch(tMF, ballF, ballFb); 
+				if stepF; doStep(); end
 				[collF, otherBodyF] = isCollision(anim, ballFb); % check collisions
-				checkWallsF();
+				checkWallsFront();
 			elseif onlyBack && (~incorrectCollideB && ~correctCollideB)
-				processBack();
-				doStep();
+				[~, stepB] = processTouch(tMB, ballB, ballBb);
+				if stepB; doStep(); end
 				[collB, otherBodyB] = isCollision(anim, ballBb); % check collisions
-				checkWallsB();
+				checkWallsBack();
 			else
 				if onlyFront; stepF = true; else; stepB = true; end
 				doStep();
@@ -435,7 +433,7 @@ end
 			updateFrame();
 			if countDownF == 0 || countDownB == 0
 				if correctCollideF
-					correct = true; correctF = true; break
+					correctF = true; break
 				end
 				if correctCollideB
 					correct = true; correctB = true; break
@@ -448,14 +446,18 @@ end
 	end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function doCoaction()
-		while ~correct && vbl < tStart + in.trialtime
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		while ~correct && (vbl < tStart + in.trialtime)
 			if KbCheck; break; end
 			stepF = false; stepB = false;
-			processFront(); processBack();
+			[~, stepF] = processTouch(tMF, ballF, ballFb);
+			[~, stepB] = processTouch(tMB, ballB, ballBb);
 			[collF, otherBodyF] = isCollision(anim, ballFb); % check collisions
 			[collB, otherBodyB] = isCollision(anim, ballBb); % check collisions
-			doStep();
+			if stepF || stepB; doStep(); end
 			checkDivider();
 			updateDivider();
 			draw(ballF); draw(ballB); 
@@ -482,60 +484,72 @@ end
 		end
 	end
 
-		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function doCooperation()
-		while ~correct && vbl < tStart + in.trialtime
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		while ~correct && (vbl < tStart + in.trialtime)
 			if KbCheck; break; end
-			stepF = false; stepB = false;
-			if onlyFront && (~incorrectCollideF && ~correctCollideF)
-				processFront();
-				doStep();
-				[collF, otherBodyF] = isCollision(anim, ballFb); % check collisions
-				checkWallsF();
-			elseif onlyBack && (~incorrectCollideB && ~correctCollideB)
-				processBack();
-				doStep();
-				[collB, otherBodyB] = isCollision(anim, ballBb); % check collisions
-				checkWallsB();
+			if coopPhase == 1
+				if ~incorrectCollideF && ~correctCollideF
+					[~, stepF] = processTouch(tMF, ballF, ballFb);
+					if stepF; doStep(); end
+					[collF, otherBodyF] = isCollision(anim, ballFb); % check collisions
+					checkWallsFront();
+				end 
 			else
-				if onlyFront; stepF = true; else; stepB = true; end
-				doStep();
-			end 
+				if ~incorrectCollideB && ~correctCollideB
+					[~, stepB] = processTouch(tMB, ballB, ballBb);
+					if stepB; doStep(); end
+					[collB, otherBodyB] = isCollision(anim, ballBb); % check collisions
+					checkWallsBack();
+				end 
+			end
+			
+			% logic for switching phase
+			if coopPhase == 1 && correctCollideF && countDownF < 1
+				fprintf('\n≣≣≣≣⊱ FRONT CORRECT @ %.2f\n', vbl - tStart);
+				correctF = true; 
+				coopPhase = 2; 
+				anim.setSensorState('ballF',true);
+				anim.setSensorState('ballB',false);
+				hide(ballF); show(ballB);
+			end
+			if coopPhase == 2 && correctCollideB && countDownB < 1
+				fprintf('\n≣≣≣≣⊱ BACK CORRECT @ %.2f\n', vbl - tStart);
+				correctB = true; correct = true; break
+			end
 			updateWalls();
-			if onlyFront
+			if coopPhase == 1
 				draw(ballF); 
-			elseif onlyBack
+			else
 				draw(ballB); 
 			end
 			draw(walls);
 			if in.verbose; drawGrid(s); drawScreenCenter(s); end
 			vbl = flip(s, vbl + sv.halfifi);
+
 			% save all animation data for each trial, we can use this to "play
-			% back" the action performed by the monkey
+			% back" the action performed by the subject
 			updateFrame();
-			if countDownF == 0 || countDownB == 0
-				if correctCollideF
-					correct = true; correctF = true; break
-				end
-				if correctCollideB
-					correct = true; correctB = true; break
-				end
-				if incorrectCollideF || incorrectCollideB
-					break
-				end
-			end 
+
+			
 		end
 	end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function doCooperationTime()
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		while ~correct && vbl < tStart + in.trialtime
 			if KbCheck; break; end
-			stepF = false; stepB = false;
-			processFront(); processBack();
+			[~, stepF] = processTouch(tMF, ballF, ballFb);
+			[~, stepB] = processTouch(tMB, ballB, ballBb);
+			if stepF || stepB; doStep(); end 
 			[collF, otherBodyF] = isCollision(anim, ballFb); % check collisions
 			[collB, otherBodyB] = isCollision(anim, ballBb); % check collisions
-			doStep();
 			checkDivider();
 			t = NaN; tboth = false;
 			if ~isnan(timerF) && ~isnan(timerB)
@@ -579,14 +593,17 @@ end
 	end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function doCompetition()
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		while ~correct && vbl < tStart + in.trialtime
 			if KbCheck; break; end
 			stepF = false; stepB = false;
 			processFront(); processBack();
 			[collF, otherBodyF] = isCollision(anim, ballFb); % check collisions
 			[collB, otherBodyB] = isCollision(anim, ballBb); % check collisions
-			doStep();
+			if stepF || stepB; doStep(); end %#ok<UNRCH>
 			checkDivider();
 			t = vbl - tStart;
 			if incorrectCollideF
@@ -624,41 +641,19 @@ end
 	end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-	function doStep()
-		if stepF || stepB
-			step(anim);
-			xF = anim.x(1); yF = anim.y(1);
-			if ~isscalar(anim.x)
-				xB = anim.x(2); yB = anim.y(2);
-			else
-				xB = []; yB = [];
-			end
-			if stepF
-				ballF.updateXY(xF, yF, true);
-				a = anim.angularVelocity(ballFidx);
-				ballF.angleOut = ballF.angleOut + (rad2deg(a) * anim.timeDelta);
-			end
-			if stepB && ~isempty(xB)
-				ballB.updateXY(xB, yB, true);
-				a = anim.angularVelocity(ballBidx);
-				ballB.angleOut = ballB.angleOut + (rad2deg(a) * anim.timeDelta);
-			end
-		end
-	end
-
+	function [inTouch, step] = processTouch(tM, stim, body) %process touch window
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-	function processFront()
-		tM = tMF;
+		inTouch = false; step = false;
 		if tM.eventAvail % check we have touch event[s]
-			tM.window.X = ballF.xFinalD;
-			tM.window.Y = ballF.yFinalD;
+			tM.window.X = stim.xFinalD;
+			tM.window.Y = stim.yFinalD;
 			[tch, ~, wasEvent] = checkTouchWindows(tM); % check we are in touch window
 			if ~wasEvent; return; end
-			if tch == true; inTouchF = true; end
+			if tch == true; inTouch = true; end
 			evt = tM.event;
 			nowX = tM.x; nowY = tM.y;
-			if inTouchF && evt.Type == 4 % this is a RELEASE event
-				if in.verbose; fprintf('≣≣≣≣⊱ processFront:RELEASE X: %.1f Y: %.1f \n',nowX,nowY); end
+			if inTouch && evt.Type == 4 % this is a RELEASE event
+				if in.verbose; fprintf('≣≣≣≣⊱ processTouch:RELEASE X: %.1f Y: %.1f \n',nowX,nowY); end
 				if length(tx) >= 3 %collected enough samples
 					ln = length(tx); if ln > iv; ln = iv; end
 					xy = [tx(end-(ln-1):end)' ty(end-(ln-1):end)'];
@@ -667,67 +662,55 @@ end
 					av = vx / 2;
 					x = xy(end,1);
 					y = xy(end,2);
-					if in.verbose; fprintf('≣≣≣≣⊱ processFront:VELOCITY X:%.1f Y:%.1f X%i: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f Y: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f A: %.1f\n', ...
-						nowX, nowY, ln, ballF.xFinal, evt.MappedX, anim.x, x, vx, ballF.yFinal, evt.MappedY, anim.y, y, vy, av); end
-					anim.editBody(ballFb,x,y,vx,vy,av);
+					if in.verbose; fprintf('≣≣≣≣⊱ processtouch:VELOCITY X:%.1f Y:%.1f X%i: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f Y: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f A: %.1f\n', ...
+						nowX, nowY, ln, stim.xFinal, evt.MappedX, anim.x, x, vx, ...
+						stim.yFinal, evt.MappedY, anim.y, y, vy, av); 
+					end
+					anim.editBody(body,x,y,vx,vy,av);
 				end
-				stepF = true;
-				xy = []; tx = []; ty = []; inTouchF = false;
-			elseif inTouchF && ~isempty(evt) && evt.Type > 0 && evt.Type < 4
-				checkLimits(limits(1:4),ballF,evt);
+				step = true;
+				xy = []; tx = []; ty = []; inTouch = false;
+			elseif inTouch && ~isempty(evt) && evt.Type > 0 && evt.Type < 4
+				checkLimits(limits(1:4), stim, evt);
 				tx = [tx nowX];
 				ty = [ty nowY];
-				anim.editBody(ballFb, nowX, nowY);
-				if in.verbose; fprintf('≣≣≣≣⊱ processFront:TOUCH X: %.1f Y: %.1f \n',nowX,nowY); end
+				anim.editBody(body, nowX, nowY);
+				if in.verbose; fprintf('≣≣≣≣⊱ processTouch:TOUCH X: %.1f Y: %.1f \n',...
+						nowX,nowY); 
+				end
 			else
-				stepF = true;
+				step = true;
 			end
 		else % no touch events are available, just run the physics engine
-			stepF = true;
+			step = true;
 		end
 	end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-	function processBack()
-		tM = tMB;
-		if tM.eventAvail % check we have touch event[s]
-			tM.window.X = ballB.xFinalD;
-			tM.window.Y = ballB.yFinalD;
-			tch = checkTouchWindows(tM); % check we are in touch window
-			if tch; inTouchB = true; end
-			evtB = tM.event;
-			nowX = tM.x; nowY = tM.y;
-			if inTouchB && evtB.Type == 4 % this is a RELEASE event
-				if in.verbose; fprintf('≣≣≣≣⊱ processBack:RELEASE X: %.1f Y: %.1f \n',nowX,nowY); end
-				if length(tx) >= 3 %collected enough samples
-					ln = length(tx); if ln > iv; ln = iv; end
-					xy = [tx(end-(ln-1):end)' ty(end-(ln-1):end)'];
-					vx = mean(diff(xy(:,1))) * ln * in.sensitivity;
-					vy = mean(diff(xy(:,2))) * ln * in.sensitivity;
-					av = vx / 2;
-					x = xy(end,1);
-					y = xy(end,2);
-					if in.verbose; fprintf('≣≣≣≣⊱ processBack:UPDATE X%i: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f Y: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f A: %.1f\n', ...
-						ln, ballB.xFinal, evtB.MappedX, anim.x(2), x, vx, ballB.yFinal, evtB.MappedY, anim.y(2), y, vy, av); end
-					anim.editBody(ballBb,x,y,vx,vy,av);
-				end
-				stepB = true;
-				xy = []; tx = []; ty = []; inTouchB = false;
-			elseif inTouchB && ~isempty(evtB) && evtB.Type > 0 && evtB.Type < 4
-				checkLimits(limits(1:4),ballB,evtB);
-				tx = [tx nowX];
-				ty = [ty nowY];
-				anim.editBody(ballBb,nowX,nowY);
-			else
-				stepB = true;
-			end
-		else % no touch events are available, just run the physics engine
-			stepB = true;
+	function doStep() % step the physics world
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		step(anim);
+		xF = anim.x(1); yF = anim.y(1);
+		if ~isscalar(anim.x)
+			xB = anim.x(2); yB = anim.y(2);
+		else
+			xB = []; yB = [];
+		end
+		if stepF
+			ballF.updateXY(xF, yF, true);
+			a = anim.angularVelocity(ballFidx);
+			ballF.angleOut = ballF.angleOut + (rad2deg(a) * anim.timeDelta);
+		end
+		if stepB && ~isempty(xB)
+			ballB.updateXY(xB, yB, true);
+			a = anim.angularVelocity(ballBidx);
+			ballB.angleOut = ballB.angleOut + (rad2deg(a) * anim.timeDelta);
 		end
 	end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function checkLimits(inlimits,inball,inevt)
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		newX = []; newY = []; pxX = []; pxY = [];
 		for jjj = 1:length(inlimits)
 			val = inlimits(jjj).val; px = inlimits(jjj).pxval;
@@ -757,7 +740,8 @@ end
 	end
 	
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-	function checkWallsF()
+	function checkWallsFront()
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		if collF && otherBodyF.hashCode == rwhash
 			correctCollideF = true; stepF = true;
 		elseif collF && otherBodyF.hashCode == lwhash
@@ -766,7 +750,8 @@ end
 	end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-	function checkWallsB()
+	function checkWallsBack()
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		if collB && otherBodyB.hashCode == lwhash
 			correctCollideB = true; stepB = true;
 		elseif collB && otherBodyB.hashCode == rwhash			
@@ -776,6 +761,7 @@ end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function checkDivider()
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		if collF && ~incorrectCollideF && ~isempty(otherBodyF) && otherBodyF.hashCode == dwfhash
 			timerF = GetSecs;
 			if matches(in.task,'competition')
@@ -798,6 +784,7 @@ end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function updateWalls()
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		if onlyFront || bothSides
 			if correctCollideF
 				walls{3}.colourOut = [0.3 0.7 0 1]; walls{3}.refreshTexture();
@@ -852,6 +839,7 @@ end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function updateDivider()
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		if onlyFront || bothSides
 			if correctCollideF
 				if matches(in.task,'competition'); hide(ballB); end
@@ -882,6 +870,7 @@ end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function updateFrame()
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		results.anidata(jj).t =  [results.anidata(jj).t, anim.timeStep];
 		results.anidata(jj).x =  [results.anidata(jj).x, anim.x(1)];
 		results.anidata(jj).y =  [results.anidata(jj).y, anim.y(1)];
@@ -897,6 +886,7 @@ end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function updateTrial()
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		results.N = [results.N jj];
 		results.correct = [results.correct correct];
 		results.wallPos = [results.wallPos 1];
@@ -975,6 +965,7 @@ end
 	
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function array = push(array, value)
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		array = [array value];
 	end
 
