@@ -6,11 +6,11 @@ commandwindow;
 
 in.task = lower(in.task);
 in.side = lower(in.side);
-mult = 1;
+timeMultiplier = 1; % time multiplier
 
 try 
 	s = screenManager('distance',in.distance,'pixelsPerCm',in.ppc);
-	s.backgroundColour = [0 0 0];
+	s.backgroundColour = [0 0 0 1];
 	if max(Screen('Screens')) == 0 && in.verbose
 		PsychDebugWindowConfiguration([],0.6);
 	end
@@ -74,14 +74,14 @@ try
 	%ballB.filePath = 'moon.png';
 	ballB.xPosition = in.startB;
 	radius = ballF.size/2;
-	startx = ballF.xPosition; starty = ballF.yPosition;
-	startx2 = ballB.xPosition; starty2 = ballB.yPosition;
+	startXFront = ballF.xPosition; startYFront = ballF.yPosition;
+	startXBack = ballB.xPosition; startYBack = ballB.yPosition;
 	setup(ballF, s); show(ballF);
 	setup(ballB, s); show(ballB);
 	
 	%===============================================ANIMATION MANAGER
 	anim = animationManager('verbose', in.verbose);
-	anim.timeDelta = sv.ifi * mult;
+	anim.timeDelta = sv.ifi * timeMultiplier;
 	anim.rigidParams.linearDamping = in.linearD;
 	
 	%===this creates 4 walls, returns a metaStimulus we can use to draw the walls visually
@@ -163,8 +163,8 @@ try
 	tMF = touchManager('device',1,'panelType',1,'name','FRONT',...
 		'isDummy',in.dummy,'verbose',in.verbose);
 	tMF.window.radius = radius; % taken from the ball
-	tMF.window.X = startx; % lock to the ball position
-	tMF.window.Y = starty; % lock to the ball position
+	tMF.window.X = startXFront; % lock to the ball position
+	tMF.window.Y = startYFront; % lock to the ball position
 	setup(tMF, s);
 	createQueue(tMF);
 	start(tMF);
@@ -172,8 +172,8 @@ try
 	tMB = touchManager('device',2,'panelType',2,'name','BACK',...
 		'isDummy',in.dummy,'verbose',in.verbose);
 	tMB.window.radius = radius; % taken from the ball
-	tMB.window.X = startx2; % lock to the ball position
-	tMB.window.Y = starty2; % lock to the ball position
+	tMB.window.X = startXBack; % lock to the ball position
+	tMB.window.Y = startYBack; % lock to the ball position
 	if isempty(tMB.names) || isscalar(tMB.names); tMB.isDummy = true; tMB.panelType = 1; end % only activate if more than 1 touchscreen
 	setup(tMB, s);
 	createQueue(tMB);
@@ -193,10 +193,13 @@ try
 	%===============================================our results structure
 	anidata = struct('N',NaN,'t',[],'x',[],'y',[],'dx',[],'dy',[],...
 		'ke',[],'pe',[]);
-	results = struct('N',[],'correct',[],'wallPos',[],...
+	results = struct('N',[],'correct',[],'correctF',[],'correctB',[],'wallPos',[],...
 		'RT',[],'date',dID,'name',fileName,...
-		'anidata',anidata);
-
+		'anidata',anidata,'coopPhase',[],'coopTimer',[],...
+		'timerF',[],'timerB',[],'correctCollideF',[],...
+		'incorrectCollideF',[],'correctCollideB',[],...
+		'incorrectCollideB',[]);
+	
 	%===============================================LOGIC FOR TASKS
 	onlyFront = false; onlyBack = false; bothSides = false;
 	if matches(in.side,'back')
@@ -221,6 +224,9 @@ try
 		results.anidata(jj).N = jj;
 		fprintf('≣≣≣≣⊱ Trial: %i\n', jj);
 
+		% reset wall colour
+		edit(walls, 1:walls.n, 'colourOut', in.wallColour);
+
 		%===Task Logic for each task
 		switch (in.task)
 			case 'control'
@@ -230,21 +236,29 @@ try
 				if onlyBack
 					hide(ballF);
 					show(ballB);
-					ballB.xPositionOut = startx2;
-					ballB.yPositionOut = starty2;
-					anim.editBody(ballBb, startx2, starty2);
+					ballB.xPositionOut = startXBack;
+					ballB.yPositionOut = startYBack;
+					anim.editBody(ballBb, startXBack, startYBack);
 					ballFb.setEnabled(false);
 					ballBb.setEnabled(true);
 					anim.setSensorState('ballF',true);
+					if in.togglepedestal
+						anim.setSensorState('ped1',true);
+						ped1.alphaOut = 0.2;
+					end
 				elseif onlyFront
 					hide(ballB);
 					show(ballF);
-					ballF.xPositionOut = startx;
-					ballF.yPositionOut = starty;
-					anim.editBody(ballFb, startx, starty);
+					ballF.xPositionOut = startXFront;
+					ballF.yPositionOut = startYFront;
+					anim.editBody(ballFb, startXFront, startYFront);
 					ballFb.setEnabled(true);
 					ballBb.setEnabled(false);
 					anim.setSensorState('ballB',true);
+					if in.togglepedestal
+						anim.setSensorState('ped2',true);
+						ped2.alphaOut = 0.2;
+					end
 				end
 			case 'coaction'
 				anim.setSensorState('ballF',false);anim.setSensorState('ballB',false);
@@ -252,51 +266,50 @@ try
 				show(dwallF); show(dwallB);
 				show(ballF);
 				show(ballB);
-				ballF.xPositionOut = startx;
-				ballF.yPositionOut = starty;
-				ballB.xPositionOut = startx2;
-				ballB.yPositionOut = starty2;
-				anim.editBody(ballFb,startx,starty);
-				anim.editBody(ballBb,startx2,starty2);
+				ballF.xPositionOut = startXFront;
+				ballF.yPositionOut = startYFront;
+				ballB.xPositionOut = startXBack;
+				ballB.yPositionOut = startYBack;
+				anim.editBody(ballFb,startXFront,startYFront);
+				anim.editBody(ballBb,startXBack,startYBack);
 			case 'cooperation'
 				splitScreen = false;
 				hide(dwallF); hide(dwallB);
 				show(ballF); anim.setSensorState('ballF',false);
 				hide(ballB); anim.setSensorState('ballB',true);
-				ballF.xPositionOut = startx;
-				ballF.yPositionOut = starty;
-				ballB.xPositionOut = startx2;
-				ballB.yPositionOut = starty2;
-				anim.editBody(ballFb,startx,starty);
-				anim.editBody(ballBb,startx2,starty2);
+				ballF.xPositionOut = startXFront;
+				ballF.yPositionOut = startYFront;
+				ballB.xPositionOut = startXBack;
+				ballB.yPositionOut = startYBack;
+				anim.editBody(ballFb,startXFront,startYFront);
+				anim.editBody(ballBb,startXBack,startYBack);
 			case 'cooperationtime'
 				anim.setSensorState('ballF',false);anim.setSensorState('ballB',false);
 				splitScreen = true;
 				show(dwallF); show(dwallB);
 				show(ballF);
 				show(ballB);
-				ballF.xPositionOut = startx;
-				ballF.yPositionOut = starty;
-				ballB.xPositionOut = startx2;
-				ballB.yPositionOut = starty2;
-				anim.editBody(ballFb,startx,starty);
-				anim.editBody(ballBb,startx2,starty2);
+				ballF.xPositionOut = startXFront;
+				ballF.yPositionOut = startYFront;
+				ballB.xPositionOut = startXBack;
+				ballB.yPositionOut = startYBack;
+				anim.editBody(ballFb,startXFront,startYFront);
+				anim.editBody(ballBb,startXBack,startYBack);
 			case 'competition'
 				anim.setSensorState('ballF',false);anim.setSensorState('ballB',false);
 				splitScreen = true;
 				show(dwallF); show(dwallB);
 					show(ballF)
 				show(ballB)
-				ballF.xPositionOut = startx;
-				ballF.yPositionOut = starty;
-				ballB.xPositionOut = startx2;
-				ballB.yPositionOut = starty2;
-				anim.editBody(ballFb,startx,starty);
-				anim.editBody(ballBb,startx2,starty2);
+				ballF.xPositionOut = startXFront;
+				ballF.yPositionOut = startYFront;
+				ballB.xPositionOut = startXBack;
+				ballB.yPositionOut = startYBack;
+				anim.editBody(ballFb,startXFront,startYFront);
+				anim.editBody(ballBb,startXBack,startYBack);
 		end
 		
 		ballF.alphaOut = 1; ballB.alphaOut = 1;
-		edit(walls, 1:walls.n, 'colourOut', in.wallColour);
 		update(ballF);
 		update(ballB);
 		update(walls);
@@ -342,11 +355,13 @@ try
 		switch (in.task)
 			case 'control'
 				doControl();
+				if correctF || correctB; correct = true; end
 			case 'coaction'
 				doCoaction();
 				if correctF || correctB; correct = true; end
 			case 'cooperation'
 				doCooperation();
+				if correctF && correctB; correct = true; end
 			case 'cooperationtime'
 				doCooperationTime();
 			case 'competition'
@@ -433,13 +448,13 @@ end
 			updateFrame();
 			if countDownF == 0 || countDownB == 0
 				if correctCollideF
-					correctF = true; break
+					correct = true; correctF = true; break
 				end
 				if correctCollideB
 					correct = true; correctB = true; break
 				end
 				if incorrectCollideF || incorrectCollideB
-					break
+					correct = false; break
 				end
 			end 
 		end
@@ -887,8 +902,18 @@ end
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function updateTrial()
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		results.coopPhase = [results.coopPhase coopPhase];
+		results.coopTimer = [results.coopTimer coopTimer];
+		results.timerF = [results.timerF timerF];
+		results.timerB = [results.timerB timerB];
+		results.correctCollideF = false;
+		results.incorrectCollideF = false;
+		results.correctCollideB = false;
+		results.incorrectCollideB = false;
 		results.N = [results.N jj];
 		results.correct = [results.correct correct];
+		results.correctF = [results.correctF correctF];
+		results.correctB = [results.correctB correctB];
 		results.wallPos = [results.wallPos 1];
 		results.RT = [results.RT (tStart - GetSecs)];
 
