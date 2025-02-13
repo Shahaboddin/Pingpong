@@ -11,8 +11,11 @@ timeMultiplier = 1; % time multiplier
 try 
 	s = screenManager('distance',in.distance,'pixelsPerCm',in.ppc);
 	s.backgroundColour = [0 0 0 1];
-	if max(Screen('Screens')) == 0 && in.verbose
-		PsychDebugWindowConfiguration([],0.6);
+	if max(Screen('Screens')) == 0 || in.debug
+		s.screen = 0;
+		if s.screen == 0 && in.debug
+			PsychDebugWindowConfiguration([],0.6);
+		end
 	end
 	sv = open(s);
 	% [left, top, right, bottom]
@@ -191,7 +194,7 @@ try
 	Priority(1);
 
 	%===============================================our results structure
-	anidata = struct('N',NaN,'t',[],'x',[],'y',[],'dx',[],'dy',[],...
+	anidata = struct('N',NaN,'t',[],'x',[],'y',[],'x2',[],'y2',[],'dx',[],'dy',[],...
 		'ke',[],'pe',[]);
 	results = struct('N',[],'correct',[],'correctF',[],'correctB',[],'wallPos',[],...
 		'RT',[],'date',dID,'name',fileName,...
@@ -386,16 +389,16 @@ try
 	try reset(ballF); end
 	try reset(ballB); end
 	try reset(walls); end
-	clear Screen
+	%if in.debug; clear Screen; end
 
 	fprintf('\n\n≣≣≣≣⊱ DATA saving to %s\n', fileName);
 	save(fileName,'results','in');
 
-	plot(in.axis1, results.anidata(end).x,results.anidata(end).y,'-');
-	xlabel(in.axis1,'X Position');
-	ylabel(in.axis1, 'Y Position');
-	plot(in.axis2, results.N, results.correct,'.-');
-	ylim(in.axis2,[-0.1 1.1]);
+	%plot(in.axis1, results.anidata(end).x,results.anidata(end).y,'-');
+	%xlabel(in.axis1,'X Position');
+	%ylabel(in.axis1, 'Y Position');
+	%plot(in.axis2, results.N, results.correct,'.-');
+	%ylim(in.axis2,[-0.1 1.1]);
 
 catch ERR
 	getReport(ERR);
@@ -441,7 +444,7 @@ end
 				draw(ballB); 
 			end
 			draw(walls);
-			if in.verbose; drawGrid(s); drawScreenCenter(s); end
+			if in.debug; drawGrid(s); drawScreenCenter(s); end
 			vbl = flip(s, vbl + sv.halfifi);
 			% save all animation data for each trial, we can use this to "play
 			% back" the action performed by the monkey
@@ -477,7 +480,7 @@ end
 			updateDivider();
 			draw(ballF); draw(ballB); 
 			draw(walls);
-			if in.verbose; drawGrid(s); drawScreenCenter(s); end
+			if in.debug; drawGrid(s); drawScreenCenter(s); end
 			vbl = flip(s, vbl + sv.halfifi);
 			% save all animation data for each trial, we can use this to "play
 			% back" the action performed by the monkey
@@ -542,7 +545,7 @@ end
 				draw(ballB); 
 			end
 			draw(walls);
-			if in.verbose; drawGrid(s); drawScreenCenter(s); end
+			if in.debug; drawGrid(s); drawScreenCenter(s); end
 			vbl = flip(s, vbl + sv.halfifi);
 
 			% save all animation data for each trial, we can use this to "play
@@ -585,7 +588,7 @@ end
 			updateDivider();
 			draw(ballF); draw(ballB); 
 			draw(walls);
-			if in.verbose; drawGrid(s); drawScreenCenter(s); end
+			if in.debug; drawGrid(s); drawScreenCenter(s); end
 			vbl = flip(s, vbl + sv.halfifi);
 			% save all animation data for each trial, we can use this to "play
 			% back" the action performed by the monkey
@@ -635,7 +638,7 @@ end
 			draw(ballF); 
 			draw(ballB); 
 			draw(walls);
-			if in.verbose; drawGrid(s); drawScreenCenter(s); end
+			if in.debug; drawGrid(s); drawScreenCenter(s); end
 			vbl = flip(s, vbl + sv.halfifi);
 			% save all animation data for each trial, we can use this to "play
 			% back" the action performed by the monkey
@@ -889,9 +892,9 @@ end
 		results.anidata(jj).t =  [results.anidata(jj).t, anim.timeStep];
 		results.anidata(jj).x =  [results.anidata(jj).x, anim.x(1)];
 		results.anidata(jj).y =  [results.anidata(jj).y, anim.y(1)];
-		if length(anim.x) == 2
-			results.anidata(jj).x2 =  [results.anidata(jj).x, anim.x(2)];
-			results.anidata(jj).y2 =  [results.anidata(jj).y, anim.y(2)];
+		if length(anim.x) > 1
+			results.anidata(jj).x2 =  [results.anidata(jj).x2, anim.x(2)];
+			results.anidata(jj).y2 =  [results.anidata(jj).y2, anim.y(2)];
 		end
 		results.anidata(jj).dx = [results.anidata(jj).dx, anim.dX];
 		results.anidata(jj).dy = [results.anidata(jj).dy, anim.dY];
@@ -973,18 +976,32 @@ end
 
 		drawBackground(s, s.backgroundColour); draw(walls); flip(s); 
 	
-		plot(in.axis1, results.anidata(end).x,results.anidata(end).y,'-');
-		if isfield(results.anidata,'x2')
+		plot(in.axis1, results.anidata(end).x,results.anidata(end).y,'go-');
+		if isfield(results.anidata,'x2') && ~isempty(results.anidata(end).x2)
 			hold(in.axis1, "on");
-			plot(in.axis1, results.anidata(end).x2,results.anidata(end).y2,':');
+			plot(in.axis1, results.anidata(end).x2,results.anidata(end).y2,'ro-');
+			legend(in.axis1, {'Front', 'Back'}, 'Location', 'northwest');
 		end
 		xlabel(in.axis1,'X Position');
 		ylabel(in.axis1, 'Y Position');
-		axis(in.axis1,'ij');
-		plot(in.axis2, results.N, results.correct,'.-');
-		xlabel(in.axis2,'Trial');
+		hold(in.axis1,'off');
+		ax1 = [sv.leftInDegrees+in.leftW sv.rightInDegrees-in.rightW sv.topInDegrees+in.ceiling sv.bottomInDegrees-in.floor];
+		
+		axis(in.axis1, ax1, 'ij');
+		hold(in.axis2,'on');
+		plot(in.axis2, results.N, results.correct,'bo-');
+		plot(in.axis2, results.N, results.correctF,'g.-');
+		plot(in.axis2, results.N, results.correctB,'r.-');
+		legend(in.axis2, {'All', 'Front', 'Back'}, 'Location', 'northwest');
+		ylim(in.axis2,[-0.1 1.1])
+		yticks(in.axis2,[0 1]);
+		yticklabels(in.axis2, {'no', 'yes'});
+		hold(in.axis2,'off');
+		pCorrect = (sum(results.correct) / jj)*100;
+		title(in.axis2,['% Correct: ' num2str(pCorrect) '%'])
+		xlabel(in.axis2,'Trial #');
 		ylabel(in.axis2, 'Correct');
-		drawnow limitrate nocallbacks
+		drawnow;
 	
 	end
 	
