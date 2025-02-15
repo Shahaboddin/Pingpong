@@ -239,28 +239,23 @@ try
 				if onlyBack
 					hide(ballF);
 					show(ballB);
-					ballB.xPositionOut = startXBack;
-					ballB.yPositionOut = startYBack;
-					anim.editBody(ballBb, startXBack, startYBack);
+					anim.editBody("ballB", startXBack, startYBack,0,0,0,true);
 					ballFb.setEnabled(false);
 					ballBb.setEnabled(true);
 					anim.setSensorState('ballF',true);
 					if in.togglepedestal
 						anim.setSensorState('ped1',true);
-						ped1.alphaOut = 0.2;
+						ped1.alphaOut = 0.1;
 					end
 				elseif onlyFront
 					hide(ballB);
 					show(ballF);
-					ballF.xPositionOut = startXFront;
-					ballF.yPositionOut = startYFront;
-					anim.editBody(ballFb, startXFront, startYFront);
-					ballFb.setEnabled(true);
+					anim.editBody("ballF", startXFront, startYFront, 0, 0, 0, true);					ballFb.setEnabled(true);
 					ballBb.setEnabled(false);
 					anim.setSensorState('ballB',true);
 					if in.togglepedestal
 						anim.setSensorState('ped2',true);
-						ped2.alphaOut = 0.2;
+						ped2.alphaOut = 0.1;
 					end
 				end
 			case 'coaction'
@@ -269,47 +264,30 @@ try
 				show(dwallF); show(dwallB);
 				show(ballF);
 				show(ballB);
-				ballF.xPositionOut = startXFront;
-				ballF.yPositionOut = startYFront;
-				ballB.xPositionOut = startXBack;
-				ballB.yPositionOut = startYBack;
-				anim.editBody(ballFb,startXFront,startYFront);
-				anim.editBody(ballBb,startXBack,startYBack);
+				anim.editBody("ballF", startXFront, startYFront, 0, 0, 0, true);
+				anim.editBody("ballB", startXBack, startYBack-2, 0, 0, 0, true);
 			case 'cooperation'
 				splitScreen = false;
-				hide(dwallF); hide(dwallB);
 				show(ballF); anim.setSensorState('ballF',false);
 				hide(ballB); anim.setSensorState('ballB',true);
-				ballF.xPositionOut = startXFront;
-				ballF.yPositionOut = startYFront;
-				ballB.xPositionOut = startXBack;
-				ballB.yPositionOut = startYBack;
-				anim.editBody(ballFb,startXFront,startYFront);
-				anim.editBody(ballBb,startXBack,startYBack);
+				hide(dwallF); hide(dwallB);
+				anim.editBody("ballF", startXFront, startYFront, 0, 0, 0, true);
+				anim.editBody("ballB", startXBack, startYBack, 0, 0, 0, true);
 			case 'cooperationtime'
-				anim.setSensorState('ballF',false);anim.setSensorState('ballB',false);
+				anim.setSensorState('ballF',false); 
+				anim.setSensorState('ballB',false);
 				splitScreen = true;
 				show(dwallF); show(dwallB);
-				show(ballF);
-				show(ballB);
-				ballF.xPositionOut = startXFront;
-				ballF.yPositionOut = startYFront;
-				ballB.xPositionOut = startXBack;
-				ballB.yPositionOut = startYBack;
-				anim.editBody(ballFb,startXFront,startYFront);
-				anim.editBody(ballBb,startXBack,startYBack);
+				show(ballF); show(ballB);
+				anim.editBody("ballF", startXFront, startYFront, 0, 0, 0, true);
+				anim.editBody("ballB", startXBack, startYBack, 0, 0, 0, true);
 			case 'competition'
-				anim.setSensorState('ballF',false);anim.setSensorState('ballB',false);
+				anim.setSensorState('ballF',false); anim.setSensorState('ballB',false);
 				splitScreen = true;
 				show(dwallF); show(dwallB);
-					show(ballF)
-				show(ballB)
-				ballF.xPositionOut = startXFront;
-				ballF.yPositionOut = startYFront;
-				ballB.xPositionOut = startXBack;
-				ballB.yPositionOut = startYBack;
-				anim.editBody(ballFb,startXFront,startYFront);
-				anim.editBody(ballBb,startXBack,startYBack);
+				show(ballF); show(ballB)
+				anim.editBody("ballF", startXFront, startYFront, 0, 0, 0, true);
+				anim.editBody("ballB", startXBack, startYBack, 0, 0, 0, true);
 		end
 		
 		ballF.alphaOut = 1; ballB.alphaOut = 1;
@@ -367,8 +345,10 @@ try
 				if correctF && correctB; correct = true; end
 			case 'cooperationtime'
 				doCooperationTime();
+				if correctF && correctB; correct = true; end
 			case 'competition'
 				doCompetition();
+				if (correctF && ~correctB) || (correctB && ~correctF); correct = true; end
 		end
 		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -516,7 +496,7 @@ end
 					[collF, otherBodyF] = isCollision(anim, ballFb); % check collisions
 					checkWallsFront();
 				end 
-			else
+			elseif coopPhase == 2
 				if ~incorrectCollideB && ~correctCollideB
 					[~, stepB] = processTouch(tMB, ballB, ballBb);
 					if stepB; doStep(); end
@@ -526,15 +506,16 @@ end
 			end
 			
 			% logic for switching phase
-			if coopPhase == 1 && correctCollideF && countDownF < 1
+			if coopPhase == 1 && correctCollideF && countDownF < 1 && ~correctF
 				fprintf('\n≣≣≣≣⊱ FRONT CORRECT @ %.2f\n', vbl - tStart);
 				correctF = true; 
-				coopPhase = 2; 
+				coopPhase = 2;
 				anim.setSensorState('ballF',true);
 				anim.setSensorState('ballB',false);
+				anim.editBody(ballBb,startXBack,startYBack,0,0,0,true);
 				hide(ballF); show(ballB);
 			end
-			if coopPhase == 2 && correctCollideB && countDownB < 1
+			if coopPhase == 2 && correctCollideB && countDownB < 1 && ~correctB
 				fprintf('\n≣≣≣≣⊱ BACK CORRECT @ %.2f\n', vbl - tStart);
 				correctB = true; correct = true; break
 			end
@@ -617,19 +598,19 @@ end
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		while ~correct && vbl < tStart + in.trialtime
 			if KbCheck; break; end
-			stepF = false; stepB = false;
-			processFront(); processBack();
+			[~, stepF] = processTouch(tMF, ballF, ballFb);
+			[~, stepB] = processTouch(tMB, ballB, ballBb);
+			if stepF || stepB; doStep(); end 
 			[collF, otherBodyF] = isCollision(anim, ballFb); % check collisions
 			[collB, otherBodyB] = isCollision(anim, ballBb); % check collisions
-			if stepF || stepB; doStep(); end %#ok<UNRCH>
 			checkDivider();
 			t = vbl - tStart;
-			if incorrectCollideF
+			if incorrectCollideF && correctCollideB
 				fprintf('\n≣≣≣≣⊱ BACK WINS IN %.2f secs\n',t);
 				hide(ballF)
 				anim.setSensorState('ballF',true);
 			end
-			if incorrectCollideB
+			if incorrectCollideB && correctCollideF
 				fprintf('\n≣≣≣≣⊱ FRONT WINS IN %.2f secs\n',t);
 				hide(ballB); 
 				anim.setSensorState('ballB',true);
@@ -793,7 +774,7 @@ end
 			timerB = GetSecs;
 			if matches(in.task,'competition')
 				correctCollideB = true;
-				incorrectCollideF=true; 
+				incorrectCollideF = true; 
 			else
 				correctCollideB = true;
 			end
@@ -905,6 +886,7 @@ end
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	function updateTrial()
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		fprintf('≣≣≣≣⊱ Final Positions: BF X %.1f Y %.1f BB X %.1f Y %.1f\n',anim.x(1),anim.y(1),anim.x(2),anim.y(2));
 		results.coopPhase = [results.coopPhase coopPhase];
 		results.coopTimer = [results.coopTimer coopTimer];
 		results.timerF = [results.timerF timerF];
