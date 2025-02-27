@@ -11,6 +11,7 @@ timeMultiplier = 1; % time multiplier
 try 
 	s = screenManager('distance',in.distance,'pixelsPerCm',in.ppc);
 	s.backgroundColour = [0 0 0 1];
+    if IsWin; s.disableSyncTests = true; end
 	if max(Screen('Screens')) == 0 || in.debug
 		s.screen = 0;
 		if s.screen == 0 && in.debug
@@ -25,10 +26,14 @@ try
 	%==============================================Arduino initialization
 	rwdFront = arduinoManager('port',in.arduinoa,'shield','new','verbose',in.verbose);
 	if isempty(in.arduinoa); rwdFront.silentMode = true; end
+    rwdFront.reward.type = in.fronttype;
+    rwdFront.reward.time = 300;
 	rwdFront.open;
 
 	rwdBack = arduinoManager('port',in.arduinob,'shield','new','verbose',in.verbose);
 	if isempty(in.arduinob); rwdBack.silentMode = true; end
+    rwdBack.reward.type = in.backtype;
+    rwdBack.reward.time = 300;
 	rwdBack.open;
 
 	%==============================================Audio Manager
