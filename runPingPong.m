@@ -432,12 +432,12 @@ end
 			if KbCheck; break; end
 			stepF = false; stepB = false;
 			if onlyFront && (~incorrectCollideF && ~correctCollideF)
-				[~, stepF] = processTouch(tMF, ballF, ballFbody); 
+				[~, stepF] = processTouch(tMF, ballF, ballFbody, ballFidx); 
 				if stepF; doStep(); end
 				[collF, otherBodyF] = isCollision(anim, ballFbody); % check collisions
 				checkWallsFront();
 			elseif onlyBack && (~incorrectCollideB && ~correctCollideB)
-				[~, stepB] = processTouch(tMB, ballB, ballBbody);
+				[~, stepB] = processTouch(tMB, ballB, ballBbody, ballBidx);
 				if stepB; doStep(); end
 				[collB, otherBodyB] = isCollision(anim, ballBbody); % check collisions
 				checkWallsBack();
@@ -479,8 +479,8 @@ end
 		while ~correct && (vbl < tStart + in.trialtime)
 			if KbCheck; break; end
 			stepF = false; stepB = false;
-			[~, stepF] = processTouch(tMF, ballF, ballFbody);
-			[~, stepB] = processTouch(tMB, ballB, ballBbody);
+			[~, stepF] = processTouch(tMF, ballF, ballFbody, ballFidx);
+			[~, stepB] = processTouch(tMB, ballB, ballBbody, ballBidx);
 			[collF, otherBodyF] = isCollision(anim, ballFbody); % check collisions
 			[collB, otherBodyB] = isCollision(anim, ballBbody); % check collisions
 			if stepF || stepB; doStep(); end
@@ -519,14 +519,14 @@ end
 			if KbCheck; break; end
 			if coopPhase == 1
 				if ~incorrectCollideF && ~correctCollideF
-					[~, stepF] = processTouch(tMF, ballF, ballFbody);
+					[~, stepF] = processTouch(tMF, ballF, ballFbody, ballFidx);
 					if stepF; doStep(); end
 					[collF, otherBodyF] = isCollision(anim, ballFbody); % check collisions
 					checkWallsFront();
 				end 
 			elseif coopPhase == 2
 				if ~incorrectCollideB && ~correctCollideB
-					[~, stepB] = processTouch(tMB, ballB, ballBbody);
+					[~, stepB] = processTouch(tMB, ballB, ballBbody, ballBidx);
 					if stepB; doStep(); end
 					[collB, otherBodyB] = isCollision(anim, ballBbody); % check collisions
 					checkWallsBack();
@@ -575,8 +575,8 @@ end
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		while ~correct && vbl < tStart + in.trialtime
 			if KbCheck; break; end
-			[~, stepF] = processTouch(tMF, ballF, ballFbody);
-			[~, stepB] = processTouch(tMB, ballB, ballBbody);
+			[~, stepF] = processTouch(tMF, ballF, ballFbody, ballFidx);
+			[~, stepB] = processTouch(tMB, ballB, ballBbody, ballBidx);
 			if stepF || stepB; doStep(); end 
 			[collF, otherBodyF] = isCollision(anim, ballFbody); % check collisions
 			[collB, otherBodyB] = isCollision(anim, ballBbody); % check collisions
@@ -629,8 +629,8 @@ end
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		while ~correct && vbl < tStart + in.trialtime
 			if KbCheck; break; end
-			[~, stepF] = processTouch(tMF, ballF, ballFbody);
-			[~, stepB] = processTouch(tMB, ballB, ballBbody);
+			[~, stepF] = processTouch(tMF, ballF, ballFbody, ballFidx);
+			[~, stepB] = processTouch(tMB, ballB, ballBbody, ballBidx);
 			if stepF || stepB; doStep(); end 
 			[collF, otherBodyF] = isCollision(anim, ballFbody); % check collisions
 			[collB, otherBodyB] = isCollision(anim, ballBbody); % check collisions
