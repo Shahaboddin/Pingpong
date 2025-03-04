@@ -4,6 +4,9 @@ if ~exist('in','var'); error('Need to run this from the GUI!'); end
 cla(in.axis1); cla(in.axis2); drawnow;
 commandwindow;
 
+correctITI = in.iticorrect;
+incorrectITI = in.itiincorrect;
+
 in.task = lower(in.task);
 in.side = lower(in.side);
 timeMultiplier = 1; % time multiplier
@@ -27,7 +30,7 @@ try
 	rwdFront = arduinoManager('port',in.arduinoa,'shield','new','verbose',in.verbose);
 	if isempty(in.arduinoa); rwdFront.silentMode = true; end
     rwdFront.reward.type = in.fronttype;
-    rwdFront.reward.time = 300;
+    rwdFront.reward.time = 800;
 	rwdFront.open;
 
 	rwdBack = arduinoManager('port',in.arduinob,'shield','new','verbose',in.verbose);
@@ -222,7 +225,7 @@ try
 		'incorrectCollideB',[]);
 	
 	%===============================================LOGIC FOR TASKS
-	rewardNow = false;
+	rewardNow = false; didRewardFront = false; didRewardBack = false;
 	onlyFront = false; onlyBack = false; bothSides = false;
 	if matches(in.side,'back')
 		onlyBack = true;
@@ -291,6 +294,10 @@ try
 				hide(anim, "ballB");
 				editBody(anim, "ballF", startXFront, startYFront, 0, 0, 0, true);
 				editBody(anim, "ballB", startXBack, startYBack, 0, 0, 0, true);
+				if in.togglepedestal
+					show(anim, "ped1");
+					hide(anim, "ped2");
+				end
 			case 'cooperationtime'
 				rewardNow = false;
 				splitScreen = true;
@@ -339,7 +346,8 @@ try
 		incorrectCollideB = false;
 		stepF = false;
 		stepB = false;
-		rewardGiven = false;
+		didRewardFront = false;
+		didRewardBack = false;
 
 		%=== Other Prep
 		drawBackground(s, s.backgroundColour);
@@ -531,13 +539,12 @@ end
 				correctF = true; 
 				coopPhase = 2;
 				if in.togglepedestal
-					anim.editBody("ped2", in.startB, ped1.yFinalD, 0, 0, 0, true);
-					anim.editBody("ped1", in.startA, -50, 0, 0, 0, true);
+					show(anim, "ped2");
+					hide(anim, "ped1");
 				end
-				setEnabled(anim, ballFbody, true);
-				setEnabled(anim, ballBbody, false);
+				hide(anim, "ballF");
+				show(anim, "ballB");
 				editBody(anim, "ballB", startXBack, startYBack, 0, 0, 0, true);
-				hide(ballF); show(ballB);
 			end
 			if coopPhase == 2 && correctCollideB && countDownB < 1 && ~correctB
 				fprintf('\n≣≣≣≣⊱ BACK CORRECT @ %.2f\n', vbl - tStart);
@@ -664,8 +671,9 @@ end
 	end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-	function [inTouch, step] = processTouch(tM, stim, body) %process touch window
+	function [inTouch, step] = processTouch(tM, stim, body, idx) %process touch window
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		if ~exist('idx','var') || isempty(idx); idx = 1; end
 		inTouch = false; step = false;
 		if tM.eventAvail % check we have touch event[s]
 			tM.window.X = stim.xFinalD;
@@ -685,9 +693,11 @@ end
 					av = vx / 2;
 					x = xy(end,1);
 					y = xy(end,2);
-					if in.verbose; fprintf('≣≣≣≣⊱ processtouch:VELOCITY X:%.1f Y:%.1f X%i: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f Y: stim:%.1f evt:%.1f anim:%.1f n:%.1f v:%.1f A: %.1f\n', ...
-						nowX, nowY, ln, stim.xFinal, evt.MappedX, anim.x, x, vx, ...
-						stim.yFinal, evt.MappedY, anim.y, y, vy, av); 
+					if in.verbose
+						fprintf(['≣≣≣≣⊱ processtouch:VELOCITY tchX:%.1f tchY:%.1f \nX%i: stimX:%.1f evtX:%.1f animX:%.1f n:%.1f v:%.1f\n' ...
+							'Y: stimY:%.1f evtY:%.1f animY:%.1f n:%.1f v:%.1f -- A: %.1f\n'], ...
+						nowX(1), nowY, ln, stim.xFinal, evt.MappedX, anim.x(idx), x, vx, ...
+						stim.yFinal, evt.MappedY, anim.y(idx), y, vy, av); 
 					end
 					anim.editBody(body,x,y,vx,vy,av);
 				end
@@ -820,10 +830,11 @@ end
 					hide(ballF); draw(walls);
 					flip(s);
 				end
-				if rewardNow && ~rewardGiven
+				if rewardNow && ~didRewardFront
 					beep(aM, 3000,0.1,0.5); 
 					giveReward(rwdFront); 
 					rewardGiven = true; 
+					didRewardFront = true;
 					if doIO; io.sendStrobe(254); end
 				end
 			elseif incorrectCollideF
@@ -851,10 +862,11 @@ end
 					hide(ballB); draw(walls);
 					flip(s); 
 				end
-				if rewardNow && ~rewardGiven
+				if rewardNow && ~didRewardBack
 					beep(aM, 2500,0.1,0.5); 
 					giveReward(rwdBack); 
 					rewardGiven = true; 
+					didRewardBack = true;
 					if doIO; io.sendStrobe(254); end
 				end
 			elseif incorrectCollideB
@@ -886,10 +898,11 @@ end
 					dwallF.colourOut = [in.wallColour]; dwallF.refreshTexture();
 					hide(ballF);
 				end
-				if rewardNow && ~rewardGiven
+				if rewardNow && ~didRewardFront
 					beep(aM, 3000,0.1,0.5); 
 					giveReward(rwdFront); 
 					rewardGiven = true; 
+					didRewardFront = true;
 					if doIO; io.sendStrobe(254); end
 				end
 			end
@@ -905,10 +918,11 @@ end
 					dwallB.colourOut = [in.wallColour]; dwallB.refreshTexture();
 					hide(ballB); 
 				end
-				if rewardNow && ~rewardGiven 
+				if rewardNow && ~didRewardBack 
 					beep(aM, 2500,0.1,0.5); 
 					giveReward(rwdBack); 
 					rewardGiven = true; 
+					didRewardBack = true;
 					if doIO; io.sendStrobe(254); end
 				end
 			end
@@ -963,7 +977,7 @@ end
 			if doIO; io.sendStrobe(250); end
 			if correctF
 				nCorrectF = nCorrectF + 1;
-				if ~rewardNow && ~rewardGiven; beep(aM, 3000,0.1,0.5); giveReward(rwdFront);end
+				if ~rewardNow && ~didRewardFront; beep(aM, 3000,0.1,0.5); giveReward(rwdFront);end
 				if splitScreen
 					drawRect(s, frontHalf,[0.3 0.6 0.3]);
 					if matches(in.task,'competition') || ~correctB
@@ -975,7 +989,7 @@ end
 			end
 			if correctB
 				nCorrectB= nCorrectB + 1;
-				if ~rewardNow && ~rewardGiven; beep(aM, 2500,0.1,0.5); giveReward(rwdBack);end
+				if ~rewardNow && ~didRewardBack; beep(aM, 2500,0.1,0.5); giveReward(rwdBack);end
 				if splitScreen
 					drawRect(s, backHalf,[0.3 0.6 0.3]);
 					if matches(in.task,'competition') || ~correctB
@@ -989,7 +1003,7 @@ end
 			flip(s);
 			WaitSecs('Yieldsecs',0.1);
 			drawBackground(s, s.backgroundColour); draw(walls); flip(s);
-			WaitSecs('Yieldsecs',0.9);
+			WaitSecs('Yieldsecs',correctITI);
 		else
 			disp('≣≣≣≣⊱ INCORRECT');
 			if doIO; io.sendStrobe(251); end
@@ -1006,7 +1020,7 @@ end
 			draw(walls); flip(s);
 			WaitSecs('Yieldsecs',0.1);
 			drawBackground(s, s.backgroundColour); draw(walls); flip(s); 
-			WaitSecs('Yieldsecs',2.9);
+			WaitSecs('Yieldsecs',incorrectITI);
 		end
 
 		drawBackground(s, s.backgroundColour); draw(walls); flip(s); 
