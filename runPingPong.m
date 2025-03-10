@@ -1,4 +1,4 @@
-function runPingPong(in)
+ function runPingPong(in)
 
 if ~exist('in','var'); error('Need to run this from the GUI!'); end
 cla(in.axis1); cla(in.axis2); drawnow;
@@ -684,7 +684,7 @@ end
 			evt = tM.event;
 			nowX = tM.x; nowY = tM.y;
 			if inTouch && evt.Type == 4 % this is a RELEASE event
-				if in.verbose; fprintf('≣≣≣≣⊱ processTouch:RELEASE X: %.1f Y: %.1f \n',nowX,nowY); end
+				if in.verbose; fprintf('≣≣≣≣⊱ processTouch@%s:RELEASE X: %.1f Y: %.1f \n',stim.name,nowX,nowY); end
 				if length(tx) >= 3 %collected enough samples
 					ln = length(tx); if ln > iv; ln = iv; end
 					xy = [tx(end-(ln-1):end)' ty(end-(ln-1):end)'];
@@ -694,9 +694,9 @@ end
 					x = xy(end,1);
 					y = xy(end,2);
 					if in.verbose
-						fprintf(['≣≣≣≣⊱ processtouch:VELOCITY tchX:%.1f tchY:%.1f \nX%i: stimX:%.1f evtX:%.1f animX:%.1f n:%.1f v:%.1f\n' ...
+						fprintf(['≣≣≣≣⊱ processtouch@%s:VELOCITY tchX:%.1f tchY:%.1f \nX%i: stimX:%.1f evtX:%.1f animX:%.1f n:%.1f v:%.1f\n' ...
 							'Y: stimY:%.1f evtY:%.1f animY:%.1f n:%.1f v:%.1f -- A: %.1f\n'], ...
-						nowX(1), nowY, ln, stim.xFinal, evt.MappedX, anim.x(idx), x, vx, ...
+						stim.name, nowX, nowY, ln, stim.xFinal, evt.MappedX, anim.x(idx), x, vx, ...
 						stim.yFinal, evt.MappedY, anim.y(idx), y, vy, av); 
 					end
 					anim.editBody(body,x,y,vx,vy,av);
@@ -708,8 +708,8 @@ end
 				tx = [tx nowX];
 				ty = [ty nowY];
 				anim.editBody(body, nowX, nowY);
-				if in.verbose; fprintf('≣≣≣≣⊱ processTouch:TOUCH X: %.1f Y: %.1f \n',...
-						nowX,nowY); 
+				if in.verbose; fprintf('≣≣≣≣⊱ processTouch@%s:TOUCH X: %.1f Y: %.1f \n',...
+						stim.name, nowX,nowY); 
 				end
 			else
 				step = true;
