@@ -334,7 +334,9 @@ try
 		coopPhase = 1; % there are two phases, 1 is monkeyA and 2 is monkeyB
 		coopTimer = NaN; % for cooperationTime
 		timerF = NaN; timerB = NaN;
-		xy = []; tx = []; ty = []; iv = round(sv.fps/5);
+		xy = []; 
+		txF = []; tyF = []; txB = []; tyB = []; 
+		iv = round(sv.fps/5);
 		XF = NaN; YF = NaN;
 		XB = NaN; YB = NaN;
 		collF = false; otherBodyF = [];
@@ -433,12 +435,12 @@ end
 			if KbCheck; break; end
 			stepF = false; stepB = false;
 			if onlyFront && (~incorrectCollideF && ~correctCollideF)
-				[~, stepF, XF, YF] = processTouch(tMF, ballF, ballFbody, ballFidx); 
+				[~, stepF, XF, YF, txF, tyF] = processTouch(tMF, ballF, ballFbody, ballFidx, txF, tyF); 
 				if stepF; doStep(); end
 				[collF, otherBodyF] = isCollision(anim, ballFbody); % check collisions
 				checkWallsFront();
 			elseif onlyBack && (~incorrectCollideB && ~correctCollideB)
-				[~, stepB, XB, YB] = processTouch(tMB, ballB, ballBbody, ballBidx);
+				[~, stepB, XB, YB, txB, tyB] = processTouch(tMB, ballB, ballBbody, ballBidx, txB, tyB);
 				if stepB; doStep(); end
 				[collB, otherBodyB] = isCollision(anim, ballBbody); % check collisions
 				checkWallsBack();
@@ -480,8 +482,8 @@ end
 		while ~correct && (vbl < tStart + in.trialtime)
 			if KbCheck; break; end
 			stepF = false; stepB = false;
-			[~, stepF, XF, YF] = processTouch(tMF, ballF, ballFbody, ballFidx);
-			[~, stepB, XB, YB] = processTouch(tMB, ballB, ballBbody, ballBidx);
+			[~, stepF, XF, YF, txF, tyF] = processTouch(tMF, ballF, ballFbody, ballFidx, txF, tyF);
+			[~, stepB, XB, YB, txB, tyB] = processTouch(tMB, ballB, ballBbody, ballBidx, txB, tyB);
 			[collF, otherBodyF] = isCollision(anim, ballFbody); % check collisions
 			[collB, otherBodyB] = isCollision(anim, ballBbody); % check collisions
 			if stepF || stepB; doStep(); end
@@ -520,14 +522,14 @@ end
 			if KbCheck; break; end
 			if coopPhase == 1
 				if ~incorrectCollideF && ~correctCollideF
-					[~, stepF, XF, YF] = processTouch(tMF, ballF, ballFbody, ballFidx);
+					[~, stepF, XF, YF, txF, tyF] = processTouch(tMF, ballF, ballFbody, ballFidx, txF, tyF);
 					if stepF; doStep(); end
 					[collF, otherBodyF] = isCollision(anim, ballFbody); % check collisions
 					checkWallsFront();
 				end 
 			elseif coopPhase == 2
 				if ~incorrectCollideB && ~correctCollideB
-					[~, stepB, XB, YB] = processTouch(tMB, ballB, ballBbody, ballBidx);
+					[~, stepB, XB, YB, txB, tyB] = processTouch(tMB, ballB, ballBbody, ballBidx, txB, tyB);
 					if stepB; doStep(); end
 					[collB, otherBodyB] = isCollision(anim, ballBbody); % check collisions
 					checkWallsBack();
@@ -576,8 +578,8 @@ end
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		while ~correct && vbl < tStart + in.trialtime
 			if KbCheck; break; end
-			[~, stepF, XF, YF] = processTouch(tMF, ballF, ballFbody, ballFidx);
-			[~, stepB, XB, YB] = processTouch(tMB, ballB, ballBbody, ballBidx);
+			[~, stepF, XF, YF, txF, tyF] = processTouch(tMF, ballF, ballFbody, ballFidx, txF, tyF);
+			[~, stepB, XB, YB, txB, tyB] = processTouch(tMB, ballB, ballBbody, ballBidx, txB, tyB);
 			if stepF || stepB; doStep(); end 
 			[collF, otherBodyF] = isCollision(anim, ballFbody); % check collisions
 			[collB, otherBodyB] = isCollision(anim, ballBbody); % check collisions
@@ -630,22 +632,21 @@ end
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		while ~correct && vbl < tStart + in.trialtime
 			if KbCheck; break; end
-			[~, stepF, XF, YF] = processTouch(tMF, ballF, ballFbody, ballFidx);
-			[~, stepB, XB, YB] = processTouch(tMB, ballB, ballBbody, ballBidx);
-			if stepF || stepB; doStep(); end 
+			stepF = false; stepB = false;
+			[~, stepF, XF, YF, txF, tyF] = processTouch(tMF, ballF, ballFbody, ballFidx, txF, tyF);
+			[~, stepB, XB, YB, txB, tyB] = processTouch(tMB, ballB, ballBbody, ballBidx, txB, tyB);
 			[collF, otherBodyF] = isCollision(anim, ballFbody); % check collisions
 			[collB, otherBodyB] = isCollision(anim, ballBbody); % check collisions
+			if stepF || stepB; doStep(); end
 			checkDivider();
 			t = vbl - tStart;
 			if incorrectCollideF && correctCollideB
 				fprintf('\n≣≣≣≣⊱ BACK WINS IN %.2f secs\n',t);
-				hide(ballF)
-				anim.setSensorState('ballF',true);
+				hide(ballF);
 			end
 			if incorrectCollideB && correctCollideF
 				fprintf('\n≣≣≣≣⊱ FRONT WINS IN %.2f secs\n',t);
-				hide(ballB); 
-				anim.setSensorState('ballB',true);
+				hide(ballB);
 			end
 			updateDivider();
 			draw(ballF); 
@@ -672,7 +673,7 @@ end
 	end
 
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-	function [inTouch, step, nowX, nowY] = processTouch(tM, stim, body, idx) %process touch window
+	function [inTouch, step, nowX, nowY, tx, ty] = processTouch(tM, stim, body, idx, tx, ty) %process touch window
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		if ~exist('idx','var') || isempty(idx); idx = 1; end
 		nowX = []; nowY = [];
@@ -703,6 +704,12 @@ end
 						tM.name, body.hashCode, tM.x, tM.y, ...
 						ln, stim.xFinal, evt.MappedX, anim.x(idx), x, vx, ...
 						stim.yFinal, evt.MappedY, anim.y(idx), y, vy, av); 
+					end
+					if strcmpi(tM.name,'FRONT') && splitScreen == true && x > 0
+						%x = -x;
+					end
+					if strcmpi(tM.name,'BACK') && splitScreen == true && x < 0
+						%x = -x;
 					end
 					anim.editBody(body, x, y, vx, vy, av);
 				end
@@ -767,7 +774,7 @@ end
 			nowX = newX;
 			inball.updateXY(pxX, [], false);
 		else
-			%inball.updateXY(inevt.MappedX, inevt.MappedY, false);
+			inball.updateXY(inevt.MappedX, inevt.MappedY, false);
 		end
 	end
 	
@@ -834,6 +841,7 @@ end
 					giveReward(rwdFront); 
 					rewardGiven = true; 
 					didRewardFront = true;
+					if in.envy; giveReward(rwdBack); didRewardBack=true; end
 					if doIO; io.sendStrobe(254); end
 				end
 			elseif incorrectCollideF
@@ -866,6 +874,7 @@ end
 					giveReward(rwdBack); 
 					rewardGiven = true; 
 					didRewardBack = true;
+					if in.envy; giveReward(rwdFront); didRewardFront=true; end
 					if doIO; io.sendStrobe(254); end
 				end
 			elseif incorrectCollideB
@@ -902,6 +911,7 @@ end
 					giveReward(rwdFront); 
 					rewardGiven = true; 
 					didRewardFront = true;
+					if in.envy; giveReward(rwdBack); didRewardBack=true; end
 					if doIO; io.sendStrobe(254); end
 				end
 			end
@@ -922,6 +932,7 @@ end
 					giveReward(rwdBack); 
 					rewardGiven = true; 
 					didRewardBack = true;
+					if in.envy; giveReward(rwdFront); didRewardFront=true; end
 					if doIO; io.sendStrobe(254); end
 				end
 			end
@@ -976,7 +987,11 @@ end
 			if doIO; io.sendStrobe(250); end
 			if correctF
 				nCorrectF = nCorrectF + 1;
-				if ~rewardNow && ~didRewardFront; beep(aM, 3000,0.1,0.5); giveReward(rwdFront);end
+				if ~rewardNow && ~didRewardFront
+					beep(aM, 3000,0.1,0.5); 
+					giveReward(rwdFront);
+					if in.envy; giveReward(rwdBack); end
+				end
 				if splitScreen
 					drawRect(s, frontHalf,[0.3 0.6 0.3]);
 					if matches(in.task,'competition') || ~correctB
@@ -988,7 +1003,11 @@ end
 			end
 			if correctB
 				nCorrectB= nCorrectB + 1;
-				if ~rewardNow && ~didRewardBack; beep(aM, 2500,0.1,0.5); giveReward(rwdBack);end
+				if ~rewardNow && ~didRewardBack
+					beep(aM, 2500,0.1,0.5); 
+					giveReward(rwdBack);
+					if in.envy; giveReward(rwdFront); end
+				end
 				if splitScreen
 					drawRect(s, backHalf,[0.3 0.6 0.3]);
 					if matches(in.task,'competition') || ~correctB
@@ -1046,7 +1065,9 @@ end
 		yticklabels(in.axis2, {'no', 'yes'});
 		hold(in.axis2,'off');
 		pCorrect = (sum(results.correct) / jj)*100;
-		title(in.axis2,['% Correct: ' num2str(pCorrect) '%'])
+		fCorrect = (sum(results.correctF) / jj)*100;
+		bCorrect = (sum(results.correctB) / jj)*100;
+		title(in.axis2,sprintf('Correct %%: All=%.1f F=%.1f B=%.1f',pCorrect,fCorrect, bCorrect));
 		xlabel(in.axis2,'Trial #');
 		ylabel(in.axis2, 'Correct');
 		drawnow;
