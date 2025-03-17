@@ -520,22 +520,23 @@ end
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		while ~correct && (vbl < tStart + in.trialtime)
 			if KbCheck; break; end
-			if coopPhase == 1
-				if ~incorrectCollideF && ~correctCollideF
-					[~, stepF, XF, YF, txF, tyF] = processTouch(tMF, ballF, ballFbody, ballFidx, txF, tyF);
-					if stepF; doStep(); end
-					[collF, otherBodyF] = isCollision(anim, ballFbody); % check collisions
-					checkWallsFront();
-				end 
-			elseif coopPhase == 2
-				if ~incorrectCollideB && ~correctCollideB
-					[~, stepB, XB, YB, txB, tyB] = processTouch(tMB, ballB, ballBbody, ballBidx, txB, tyB);
-					if stepB; doStep(); end
-					[collB, otherBodyB] = isCollision(anim, ballBbody); % check collisions
-					checkWallsBack();
-				end 
+			stepF = false; stepB = false;
+			if coopPhase == 1 && (~incorrectCollideF && ~correctCollideF)
+				[~, stepF, XF, YF, txF, tyF] = processTouch(tMF, ballF, ballFbody, ballFidx, txF, tyF);
+				if stepF; doStep(); end
+				[collF, otherBodyF] = isCollision(anim, ballFbody); % check collisions
+				checkWallsFront();
+			elseif coopPhase == 2 && (~incorrectCollideB && ~correctCollideB)
+				[~, stepB, XB, YB, txB, tyB] = processTouch(tMB, ballB, ballBbody, ballBidx, txB, tyB);
+				if stepB; doStep(); end
+				[collB, otherBodyB] = isCollision(anim, ballBbody); % check collisions
+				checkWallsBack();
 			end
-			
+			if countDownF == 0 || countDownB == 0
+				if incorrectCollideF || incorrectCollideB
+					correct = false; break
+				end
+			end
 			% logic for switching phase
 			if coopPhase == 1 && correctCollideF && countDownF < 1 && ~correctF
 				fprintf('\n≣≣≣≣⊱ FRONT CORRECT @ %.2f\n', vbl - tStart);
@@ -554,6 +555,7 @@ end
 				correctB = true; correct = true; break
 			end
 			updateWalls();
+			
 			if coopPhase == 1
 				draw(ballF); 
 			else
